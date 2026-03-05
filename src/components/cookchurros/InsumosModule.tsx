@@ -6,6 +6,11 @@ const medidas: Medida[] = ["g", "kg", "ml", "L", "un"];
 
 export default function InsumosModule() {
   const [insumos, setInsumos] = useState<Insumo[]>(() => {
+    const version = localStorage.getItem("insumos_version");
+    if (version !== "2") {
+      localStorage.removeItem("insumos");
+      localStorage.setItem("insumos_version", "2");
+    }
     const saved = localStorage.getItem("insumos");
     return saved ? JSON.parse(saved) : [
       { nome: "Farinha de Trigo", qtdeCompra: 1, medidaCompra: "kg", precoCompra: 3.45, qtdeUtil: 1000, medidaUtil: "g" },
