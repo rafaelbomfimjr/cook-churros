@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import { Insumo, Produto, Medida, calcularCustoProduto, formatBRL } from "@/lib/cookchurros";
 
@@ -9,10 +9,10 @@ export default function CardapioModule() {
     const s = localStorage.getItem("produtos");
     return s ? JSON.parse(s) : [];
   });
-  const [insumos] = useState<Insumo[]>(() => {
+  const insumos = useMemo<Insumo[]>(() => {
     const s = localStorage.getItem("insumos");
     return s ? JSON.parse(s) : [];
-  });
+  }, []);
   const [expanded, setExpanded] = useState<number | null>(null);
 
   const save = (novo: Produto[]) => {
