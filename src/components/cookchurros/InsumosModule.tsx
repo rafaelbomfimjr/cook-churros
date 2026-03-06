@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, ArrowUp, ArrowDown } from "lucide-react";
 import { Insumo, Medida, calcularCustoInsumo, formatBRL } from "@/lib/cookchurros";
 
 const medidas: Medida[] = ["g", "kg", "ml", "L", "un"];
@@ -81,6 +81,18 @@ export default function InsumosModule() {
     );
     save(novo);
   };
+  const moverCima = (i: number) => {
+    if (i === 0) return;
+    const novo = [...insumos];
+    [novo[i - 1], novo[i]] = [novo[i], novo[i - 1]];
+    save(novo);
+  };
+  const moverBaixo = (i: number) => {
+    if (i === insumos.length - 1) return;
+    const novo = [...insumos];
+    [novo[i + 1], novo[i]] = [novo[i], novo[i + 1]];
+    save(novo);
+  };
 
   return (
     <div>
@@ -95,6 +107,7 @@ export default function InsumosModule() {
         <table className="data-table min-w-[800px]">
           <thead>
             <tr>
+              <th className="w-16">Ordem</th>
               <th>Nome</th>
               <th>Qtde Compra</th>
               <th>Medida</th>
@@ -110,8 +123,18 @@ export default function InsumosModule() {
             {insumos.map((ins, i) => {
               const { desperdicio, precoReal } = calcularCustoInsumo(ins);
               return (
-                <tr key={i}>
-                  <td><input value={ins.nome} onChange={e => editar(i, "nome", e.target.value)} /></td>
+                 <tr key={i}>
+                   <td>
+                     <div className="flex gap-1 justify-center">
+                       <button className="btn-ghost p-0.5" onClick={() => moverCima(i)} disabled={i === 0} title="Mover para cima">
+                         <ArrowUp size={13} />
+                       </button>
+                       <button className="btn-ghost p-0.5" onClick={() => moverBaixo(i)} disabled={i === insumos.length - 1} title="Mover para baixo">
+                         <ArrowDown size={13} />
+                       </button>
+                     </div>
+                   </td>
+                   <td><input value={ins.nome} onChange={e => editar(i, "nome", e.target.value)} /></td>
                   <td><input type="number" value={ins.qtdeCompra || ""} onChange={e => editar(i, "qtdeCompra", e.target.value)} /></td>
                   <td>
                     <select value={ins.medidaCompra} onChange={e => editar(i, "medidaCompra", e.target.value)}>
