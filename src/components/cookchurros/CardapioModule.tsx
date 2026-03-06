@@ -1,19 +1,26 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import { Insumo, Produto, Medida, calcularCustoProduto, formatBRL } from "@/lib/cookchurros";
 
 const medidas: Medida[] = ["g", "kg", "ml", "L", "un"];
+
+const getInsumos = (): Insumo[] => {
+  const s = localStorage.getItem("insumos");
+  return s ? JSON.parse(s) : [];
+};
 
 export default function CardapioModule() {
   const [produtos, setProdutos] = useState<Produto[]>(() => {
     const s = localStorage.getItem("produtos");
     return s ? JSON.parse(s) : [];
   });
-  const insumos = useMemo<Insumo[]>(() => {
-    const s = localStorage.getItem("insumos");
-    return s ? JSON.parse(s) : [];
-  }, []);
+  const [insumos, setInsumos] = useState<Insumo[]>(getInsumos);
   const [expanded, setExpanded] = useState<number | null>(null);
+
+  // Re-lê insumos do localStorage sempre que o componente monta ou ganha foco
+  useEffect(() => {
+    setInsumos(getInsumos());
+  }, []);
 
   const save = (novo: Produto[]) => {
     setProdutos(novo);
@@ -33,9 +40,11 @@ export default function CardapioModule() {
   };
 
   const adicionarItem = (pi: number) => {
-    if (insumos.length === 0) { alert("Cadastre insumos primeiro."); return; }
+    const insumosAtuais = getInsumos();
+    if (insumosAtuais.length === 0) { alert("Cadastre insumos primeiro."); return; }
+    setInsumos(insumosAtuais);
     const novos = produtos.map((p, idx) =>
-      idx === pi ? { ...p, receita: [...p.receita, { insumoNome: insumos[0].nome, quantidade: 0, medida: insumos[0].medidaUtil as Medida }] } : p
+      idx === pi ? { ...p, receita: [...p.receita, { insumoNome: insumosAtuais[0].nome, quantidade: 0, medida: insumosAtuais[0].medidaUtil as Medida }] } : p
     );
     save(novos);
   };
