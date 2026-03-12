@@ -31,6 +31,7 @@ export default function Login() {
     setLoading(true);
     // TODO: substitua pela sua lógica de autenticação real
     await new Promise((res) => setTimeout(res, 1000));
+    localStorage.setItem("cook_churros_auth", "true");
     setLoading(false);
     setSuccess(true);
     setTimeout(() => navigate("/"), 1500);
