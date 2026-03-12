@@ -1,31 +1,16 @@
 import { useState, useEffect } from "react";
 import { Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
-import { Insumo, Produto, Medida, calcularCustoProduto, formatBRL } from "@/lib/cookchurros";
+import { Produto, Medida, calcularCustoProduto, formatBRL } from "@/lib/cookchurros";
+import { useInsumos, useProdutos } from "@/hooks/useCloudData";
 
 const medidas: Medida[] = ["g", "kg", "ml", "L", "un"];
 
-const getInsumos = (): Insumo[] => {
-  const s = localStorage.getItem("insumos");
-  return s ? JSON.parse(s) : [];
-};
-
 export default function CardapioModule() {
-  const [produtos, setProdutos] = useState<Produto[]>(() => {
-    const s = localStorage.getItem("produtos");
-    return s ? JSON.parse(s) : [];
-  });
-  const [insumos, setInsumos] = useState<Insumo[]>(getInsumos);
+  const { insumos, loading: loadingInsumos } = useInsumos();
+  const { produtos, loading: loadingProdutos, save } = useProdutos();
   const [expanded, setExpanded] = useState<number | null>(null);
 
-  // Re-lê insumos do localStorage sempre que o componente monta ou ganha foco
-  useEffect(() => {
-    setInsumos(getInsumos());
-  }, []);
-
-  const save = (novo: Produto[]) => {
-    setProdutos(novo);
-    localStorage.setItem("produtos", JSON.stringify(novo));
-  };
+  const loading = loadingInsumos || loadingProdutos;
 
   const adicionar = () => {
     const novo = [...produtos, { nome: "Novo Produto", rendimento: 1, receita: [] }];
@@ -40,11 +25,9 @@ export default function CardapioModule() {
   };
 
   const adicionarItem = (pi: number) => {
-    const insumosAtuais = getInsumos();
-    if (insumosAtuais.length === 0) { alert("Cadastre insumos primeiro."); return; }
-    setInsumos(insumosAtuais);
+    if (insumos.length === 0) { alert("Cadastre insumos primeiro."); return; }
     const novos = produtos.map((p, idx) =>
-      idx === pi ? { ...p, receita: [...p.receita, { insumoNome: insumosAtuais[0].nome, quantidade: 0, medida: insumosAtuais[0].medidaUtil as Medida }] } : p
+      idx === pi ? { ...p, receita: [...p.receita, { insumoNome: insumos[0].nome, quantidade: 0, medida: insumos[0].medidaUtil as Medida }] } : p
     );
     save(novos);
   };
@@ -62,6 +45,14 @@ export default function CardapioModule() {
       } : p
     ));
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24 text-muted-foreground">
+        <span className="animate-pulse font-semibold">Carregando cardápio...</span>
+      </div>
+    );
+  }
 
   return (
     <div>
