@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChefHat, Eye, EyeOff } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 export default function Login() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [errors, setErrors] = useState<{ email?: string; password?: string; general?: string }>({});
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
@@ -29,39 +30,35 @@ export default function Login() {
     if (!validate()) return;
 
     setLoading(true);
-    // TODO: substitua pela sua lógica de autenticação real
-    await new Promise((res) => setTimeout(res, 1000));
-    localStorage.setItem("cook_churros_auth", "true");
+    setErrors({});
+
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+
+    if (error) {
+      setLoading(false);
+      setErrors({ general: "E-mail ou senha incorretos. Tente novamente." });
+      return;
+    }
+
     setLoading(false);
     setSuccess(true);
-    setTimeout(() => navigate("/"), 1500);
+    setTimeout(() => navigate("/"), 1200);
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-4xl rounded-2xl overflow-hidden flex shadow-md border border-border">
 
-        {/* ── Painel esquerdo — identidade da marca ── */}
+        {/* Painel esquerdo */}
         <div
           className="hidden md:flex flex-col justify-between p-10 w-5/12 relative overflow-hidden"
           style={{ background: "hsl(220 30% 14%)" }}
         >
-          {/* Círculos decorativos */}
-          <div
-            className="absolute -top-16 -right-16 w-56 h-56 rounded-full opacity-20"
-            style={{ background: "hsl(var(--primary))" }}
-          />
-          <div
-            className="absolute -bottom-12 -left-12 w-44 h-44 rounded-full opacity-10"
-            style={{ background: "hsl(var(--primary))" }}
-          />
+          <div className="absolute -top-16 -right-16 w-56 h-56 rounded-full opacity-20" style={{ background: "hsl(var(--primary))" }} />
+          <div className="absolute -bottom-12 -left-12 w-44 h-44 rounded-full opacity-10" style={{ background: "hsl(var(--primary))" }} />
 
-          {/* Logo + copy */}
           <div className="relative z-10">
-            <div
-              className="w-11 h-11 rounded-xl flex items-center justify-center mb-6"
-              style={{ background: "hsl(var(--primary))" }}
-            >
+            <div className="w-11 h-11 rounded-xl flex items-center justify-center mb-6" style={{ background: "hsl(var(--primary))" }}>
               <ChefHat size={20} color="white" />
             </div>
             <h1 className="text-3xl font-extrabold leading-tight mb-3" style={{ color: "hsl(220 15% 85%)" }}>
@@ -72,55 +69,44 @@ export default function Login() {
             </p>
           </div>
 
-          {/* Rodapé do painel */}
           <div className="relative z-10 border-t pt-6" style={{ borderColor: "hsl(220 25% 20%)" }}>
             <p className="text-sm italic leading-relaxed mb-3" style={{ color: "hsl(220 10% 45%)" }}>
               "Organização é o ingrediente secreto de todo negócio de sucesso."
             </p>
-            <span className="text-xs font-semibold" style={{ color: "hsl(220 10% 35%)" }}>
-              — Sistema de Gestão v2.0
-            </span>
+            <span className="text-xs font-semibold" style={{ color: "hsl(220 10% 35%)" }}>— Sistema de Gestão v2.0</span>
           </div>
         </div>
 
-        {/* ── Painel direito — formulário ── */}
+        {/* Painel direito */}
         <div className="flex-1 flex flex-col justify-center px-8 py-10 md:px-12 bg-card">
           <div className="max-w-sm w-full mx-auto">
 
-            {/* Logo mobile */}
             <div className="flex items-center gap-3 mb-8 md:hidden">
-              <div
-                className="w-10 h-10 rounded-xl flex items-center justify-center"
-                style={{ background: "hsl(220 30% 14%)" }}
-              >
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "hsl(220 30% 14%)" }}>
                 <ChefHat size={18} color="white" />
               </div>
-              <span className="text-xl font-extrabold" style={{ color: "hsl(var(--foreground))" }}>
-                Cook Churros
-              </span>
+              <span className="text-xl font-extrabold" style={{ color: "hsl(var(--foreground))" }}>Cook Churros</span>
             </div>
 
-            <h2 className="text-2xl font-extrabold mb-1" style={{ color: "hsl(var(--foreground))" }}>
-              Bem-vindo de volta
-            </h2>
-            <p className="text-sm mb-7" style={{ color: "hsl(var(--muted-foreground))" }}>
-              Entre com sua conta para continuar
-            </p>
+            <h2 className="text-2xl font-extrabold mb-1" style={{ color: "hsl(var(--foreground))" }}>Bem-vindo de volta</h2>
+            <p className="text-sm mb-7" style={{ color: "hsl(var(--muted-foreground))" }}>Entre com sua conta para continuar</p>
 
-            {/* Banner de sucesso */}
             {success && (
               <div className="badge-green flex items-center gap-2 px-4 py-3 rounded-xl mb-6 text-sm font-semibold">
                 Login realizado! Redirecionando...
               </div>
             )}
 
-            <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
+            {errors.general && (
+              <div className="flex items-center gap-2 px-4 py-3 rounded-xl mb-5 text-sm font-semibold"
+                style={{ background: "hsl(var(--destructive) / 0.1)", color: "hsl(var(--destructive))" }}>
+                {errors.general}
+              </div>
+            )}
 
-              {/* Campo e-mail */}
+            <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold uppercase tracking-wider stat-label">
-                  E-mail
-                </label>
+                <label className="text-xs font-bold uppercase tracking-wider stat-label">E-mail</label>
                 <input
                   type="email"
                   value={email}
@@ -129,25 +115,13 @@ export default function Login() {
                   className="inline-input w-full h-11 text-sm"
                   autoComplete="email"
                 />
-                {errors.email && (
-                  <span className="text-xs font-semibold" style={{ color: "hsl(var(--destructive))" }}>
-                    {errors.email}
-                  </span>
-                )}
+                {errors.email && <span className="text-xs font-semibold" style={{ color: "hsl(var(--destructive))" }}>{errors.email}</span>}
               </div>
 
-              {/* Campo senha */}
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold uppercase tracking-wider stat-label">
-                    Senha
-                  </label>
-                  <button
-                    type="button"
-                    className="text-xs font-semibold"
-                    style={{ color: "hsl(var(--primary))" }}
-                    onClick={() => {/* TODO: implementar recuperação de senha */}}
-                  >
+                  <label className="text-xs font-bold uppercase tracking-wider stat-label">Senha</label>
+                  <button type="button" className="text-xs font-semibold" style={{ color: "hsl(var(--primary))" }}>
                     Esqueceu a senha?
                   </button>
                 </div>
@@ -169,14 +143,9 @@ export default function Login() {
                     {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
-                {errors.password && (
-                  <span className="text-xs font-semibold" style={{ color: "hsl(var(--destructive))" }}>
-                    {errors.password}
-                  </span>
-                )}
+                {errors.password && <span className="text-xs font-semibold" style={{ color: "hsl(var(--destructive))" }}>{errors.password}</span>}
               </div>
 
-              {/* Botão entrar */}
               <button
                 type="submit"
                 disabled={loading || success}
@@ -185,10 +154,8 @@ export default function Login() {
                 {loading ? "Entrando..." : "Entrar"}
               </button>
             </form>
-
           </div>
         </div>
-
       </div>
     </div>
   );
