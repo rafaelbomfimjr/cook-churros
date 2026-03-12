@@ -1,34 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { Plus, Trash2, TrendingUp, DollarSign, Percent } from "lucide-react";
-import { DadosOperacional, DadosMes, getDefaultDadosMes, formatBRL, mesAtualKey } from "@/lib/cookchurros";
+import { formatBRL } from "@/lib/cookchurros";
+import { useOperacional } from "@/hooks/useCloudData";
 
 export default function OperacionalModule() {
-  const [mesAtual, setMesAtual] = useState(mesAtualKey());
-  const [dados, setDados] = useState<DadosOperacional>(() => {
-    const saved = localStorage.getItem("dadosOperacional");
-    return saved ? JSON.parse(saved) : {};
-  });
+  const { dados, dadosMes, mesAtual, loading, updateMes, trocarMes } = useOperacional();
 
   const chartRef = useRef<HTMLCanvasElement>(null);
   const chartInstance = useRef<any>(null);
-
-  const dadosMes: DadosMes = dados[mesAtual] || getDefaultDadosMes();
-
-  const save = (novo: DadosOperacional) => {
-    setDados(novo);
-    localStorage.setItem("dadosOperacional", JSON.stringify(novo));
-  };
-
-  const updateMes = (novo: Partial<DadosMes>) => {
-    save({ ...dados, [mesAtual]: { ...dadosMes, ...novo } });
-  };
-
-  const trocarMes = (novoMes: string) => {
-    const novoDados = { ...dados };
-    if (!novoDados[novoMes]) novoDados[novoMes] = getDefaultDadosMes();
-    save(novoDados);
-    setMesAtual(novoMes);
-  };
 
   const totalGastos = dadosMes.gastos.reduce((acc, g) => acc + g.valor, 0);
   const custoOperacional = dadosMes.faturamento > 0 ? (totalGastos / dadosMes.faturamento) * 100 : 0;
@@ -38,8 +17,7 @@ export default function OperacionalModule() {
   };
 
   const removerGasto = (i: number) => {
-    const novos = dadosMes.gastos.filter((_, idx) => idx !== i);
-    updateMes({ gastos: novos });
+    updateMes({ gastos: dadosMes.gastos.filter((_, idx) => idx !== i) });
   };
 
   const editarGasto = (i: number, campo: "nome" | "valor", val: string) => {
@@ -51,12 +29,12 @@ export default function OperacionalModule() {
 
   useEffect(() => {
     if (!chartRef.current) return;
-    const script = document.createElement("script");
-    script.src = "https://cdn.jsdelivr.net/npm/chart.js";
-    script.onload = () => renderChart();
     if ((window as any).Chart) {
       renderChart();
     } else {
+      const script = document.createElement("script");
+      script.src = "https://cdn.jsdelivr.net/npm/chart.js";
+      script.onload = () => renderChart();
       document.head.appendChild(script);
     }
   }, [dados]);
@@ -103,6 +81,14 @@ export default function OperacionalModule() {
   };
 
   const custoColor = custoOperacional > 40 ? "text-destructive" : custoOperacional > 25 ? "text-yellow-500" : "text-green-600";
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24 text-muted-foreground">
+        <span className="animate-pulse font-semibold">Carregando operacional...</span>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -174,10 +160,7 @@ export default function OperacionalModule() {
             {dadosMes.gastos.map((g, i) => (
               <tr key={i}>
                 <td>
-                  <input
-                    value={g.nome}
-                    onChange={e => editarGasto(i, "nome", e.target.value)}
-                  />
+                  <input value={g.nome} onChange={e => editarGasto(i, "nome", e.target.value)} />
                 </td>
                 <td>
                   <input
