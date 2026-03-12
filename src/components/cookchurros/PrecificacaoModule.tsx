@@ -1,16 +1,21 @@
 import { useState } from "react";
-import { Insumo, Produto, calcularCustoProduto, formatBRL } from "@/lib/cookchurros";
+import { calcularCustoProduto, formatBRL } from "@/lib/cookchurros";
+import { useInsumos, useProdutos } from "@/hooks/useCloudData";
 
 export default function PrecificacaoModule() {
-  const [produtos] = useState<Produto[]>(() => {
-    const s = localStorage.getItem("produtos");
-    return s ? JSON.parse(s) : [];
-  });
-  const [insumos] = useState<Insumo[]>(() => {
-    const s = localStorage.getItem("insumos");
-    return s ? JSON.parse(s) : [];
-  });
+  const { insumos, loading: loadingInsumos } = useInsumos();
+  const { produtos, loading: loadingProdutos } = useProdutos();
   const [margemPadrao, setMargemPadrao] = useState(60);
+
+  const loading = loadingInsumos || loadingProdutos;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24 text-muted-foreground">
+        <span className="animate-pulse font-semibold">Carregando precificação...</span>
+      </div>
+    );
+  }
 
   return (
     <div>
