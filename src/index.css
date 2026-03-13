@@ -6,52 +6,60 @@
 
 @layer base {
   :root {
-    --background: 220 20% 97%;
-    --foreground: 220 25% 12%;
+    /* ── Cook Churros Brand Colors ── */
+    /* #01757A → teal principal  */
+    /* #8A381C → terracota/marrom */
+    /* #94BFC2 → azul-esverdeado claro */
+
+    --background: 183 15% 95%;        /* off-white levemente teal */
+    --foreground: 183 60% 12%;        /* quase preto teal */
 
     --card: 0 0% 100%;
-    --card-foreground: 220 25% 12%;
+    --card-foreground: 183 60% 12%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 220 25% 12%;
+    --popover-foreground: 183 60% 12%;
 
-    /* Churros golden/warm brand */
-    --primary: 32 95% 50%;
+    /* Primary = teal #01757A */
+    --primary: 183 98% 24%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 18% 92%;
-    --secondary-foreground: 220 25% 20%;
+    /* Secondary = terracota #8A381C */
+    --secondary: 18 66% 32%;
+    --secondary-foreground: 0 0% 100%;
 
-    --muted: 220 15% 94%;
-    --muted-foreground: 220 10% 50%;
+    --muted: 183 20% 90%;
+    --muted-foreground: 183 15% 45%;
 
-    --accent: 32 80% 95%;
-    --accent-foreground: 32 95% 35%;
+    /* Accent = azul claro #94BFC2 */
+    --accent: 183 30% 80%;
+    --accent-foreground: 183 60% 15%;
 
     --destructive: 0 72% 55%;
     --destructive-foreground: 0 0% 100%;
 
-    --success: 145 60% 42%;
+    --success: 145 60% 35%;
     --success-foreground: 0 0% 100%;
 
-    --border: 220 15% 88%;
-    --input: 220 15% 88%;
-    --ring: 32 95% 50%;
+    --border: 183 20% 82%;
+    --input: 183 20% 82%;
+    --ring: 183 98% 24%;
 
     --radius: 0.75rem;
 
-    --sidebar-bg: 220 30% 14%;
-    --sidebar-fg: 220 15% 85%;
-    --sidebar-active: 32 95% 50%;
+    /* Sidebar usa o teal escuro */
+    --sidebar-bg: 183 98% 14%;
+    --sidebar-fg: 183 30% 80%;
+    --sidebar-active: 18 66% 32%;
 
-    --sidebar-background: 220 30% 14%;
-    --sidebar-foreground: 220 15% 85%;
-    --sidebar-primary: 32 95% 50%;
+    --sidebar-background: 183 98% 14%;
+    --sidebar-foreground: 183 30% 80%;
+    --sidebar-primary: 18 66% 32%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 220 25% 20%;
-    --sidebar-accent-foreground: 220 15% 85%;
-    --sidebar-border: 220 25% 20%;
-    --sidebar-ring: 32 95% 50%;
+    --sidebar-accent: 183 70% 20%;
+    --sidebar-accent-foreground: 183 30% 90%;
+    --sidebar-border: 183 70% 20%;
+    --sidebar-ring: 18 66% 32%;
   }
 }
 
@@ -91,7 +99,7 @@
   .stat-card {
     @apply rounded-2xl p-5 flex flex-col gap-2;
     background: hsl(var(--card));
-    box-shadow: 0 2px 12px hsl(220 15% 10% / 0.06);
+    box-shadow: 0 2px 12px hsl(183 50% 10% / 0.08);
   }
 
   .stat-label {
@@ -107,7 +115,7 @@
   .data-table {
     @apply w-full rounded-2xl overflow-hidden;
     background: hsl(var(--card));
-    box-shadow: 0 2px 12px hsl(220 15% 10% / 0.06);
+    box-shadow: 0 2px 12px hsl(183 50% 10% / 0.08);
   }
 
   .data-table thead {
@@ -129,7 +137,7 @@
   }
 
   .data-table tr:hover td {
-    background: hsl(var(--accent));
+    background: hsl(var(--accent) / 0.3);
   }
 
   .data-table input,
@@ -154,9 +162,21 @@
   }
 
   .btn-primary:hover {
-    filter: brightness(1.08);
+    filter: brightness(1.1);
     transform: translateY(-1px);
     box-shadow: 0 5px 16px hsl(var(--primary) / 0.45);
+  }
+
+  .btn-secondary {
+    @apply flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all duration-200;
+    background: hsl(var(--secondary));
+    color: hsl(var(--secondary-foreground));
+    box-shadow: 0 3px 10px hsl(var(--secondary) / 0.30);
+  }
+
+  .btn-secondary:hover {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
   }
 
   .btn-danger {
@@ -173,7 +193,7 @@
   .produto-card {
     @apply rounded-2xl p-5;
     background: hsl(var(--card));
-    box-shadow: 0 2px 12px hsl(220 15% 10% / 0.06);
+    box-shadow: 0 2px 12px hsl(183 50% 10% / 0.08);
     border: 1px solid hsl(var(--border));
   }
 
@@ -209,9 +229,15 @@
     color: hsl(var(--success));
   }
 
-  .badge-orange {
+  .badge-teal {
     @apply text-xs font-bold px-2 py-0.5 rounded-full;
     background: hsl(var(--primary) / 0.12);
     color: hsl(var(--primary));
+  }
+
+  .badge-orange {
+    @apply text-xs font-bold px-2 py-0.5 rounded-full;
+    background: hsl(var(--secondary) / 0.12);
+    color: hsl(var(--secondary));
   }
 }
