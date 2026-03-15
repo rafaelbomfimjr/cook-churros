@@ -1,4 +1,5 @@
-import { Plus, Trash2, ArrowUp, ArrowDown } from "lucide-react";
+import { Plus, Trash2, ArrowUp, ArrowDown, FileText } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Insumo, Medida, calcularCustoInsumo, formatBRL } from "@/lib/cookchurros";
 import { useInsumos } from "@/hooks/useCloudData";
 
@@ -47,9 +48,18 @@ export default function InsumosModule() {
     <div>
       <div className="section-header">
         <h1 className="page-title mb-0">Insumos</h1>
-        <button className="btn-primary" onClick={adicionar}>
-          <Plus size={14} /> Adicionar Insumo
-        </button>
+        <div className="flex items-center gap-2">
+          <Link
+            to="/importar-nfce"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all"
+            style={{ color: "hsl(var(--muted-foreground))", border: "1px solid hsl(var(--border))" }}
+          >
+            <FileText size={13} /> Importar NFC-e
+          </Link>
+          <button className="btn-primary" onClick={adicionar}>
+            <Plus size={14} /> Adicionar Insumo
+          </button>
+        </div>
       </div>
 
       <div className="overflow-x-auto">
