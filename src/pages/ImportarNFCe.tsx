@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { FileText, CheckCircle2, AlertCircle, Plus, ChevronRight, ClipboardPaste } from "lucide-react";
 
 interface ItemNFCe {
@@ -86,11 +86,25 @@ type Step = "paste" | "preview" | "success";
 
 export default function ImportarNFCe() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [step, setStep] = useState<Step>("paste");
   const [texto, setTexto] = useState("");
   const [nfce, setNfce] = useState<NFCeData | null>(null);
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
+
+  // Receber dados do bookmarklet via URL (?data=...)
+  useEffect(() => {
+    const data = searchParams.get("data");
+    if (!data) return;
+    try {
+      const parsed: NFCeData = JSON.parse(decodeURIComponent(data));
+      if (parsed.itens && parsed.itens.length > 0) {
+        setNfce(parsed);
+        setStep("preview");
+      }
+    } catch {}
+  }, []);
 
   const processar = () => {
     setErro("");
