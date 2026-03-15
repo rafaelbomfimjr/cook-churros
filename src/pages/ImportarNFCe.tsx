@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { FileText, CheckCircle2, AlertCircle, Plus, ChevronRight, ClipboardPaste } from "lucide-react";
+import { FileText, CheckCircle2, AlertCircle, Trash2, ChevronRight, ClipboardPaste } from "lucide-react";
 
 interface ItemNFCe {
   nome: string;
@@ -86,6 +86,7 @@ export default function ImportarNFCe() {
   const [nfce, setNfce] = useState<NFCeData | null>(null);
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
+  const [itensFiltrados, setItensFiltrados] = useState<ItemNFCe[]>([]);
 
   useEffect(() => {
     const data = searchParams.get("data");
@@ -105,6 +106,7 @@ export default function ImportarNFCe() {
       return;
     }
     setNfce(parsed);
+    setItensFiltrados(parsed.itens);
     setStep("preview");
   };
 
@@ -138,7 +140,7 @@ export default function ImportarNFCe() {
         return "un";
       };
 
-      for (const item of nfce.itens) {
+      for (const item of itensFiltrados) {
         const jaExiste = insumos.some(
           ins => ins.nome.toLowerCase().trim() === item.nome.toLowerCase().trim()
         );
@@ -168,7 +170,9 @@ export default function ImportarNFCe() {
     }
   };
 
-  const resetar = () => { setStep("colar"); setNfce(null); setErro(""); setTexto(""); };
+  const removerItem = (i: number) => setItensFiltrados(prev => prev.filter((_, idx) => idx !== i));
+
+  const resetar = () => { setStep("colar"); setNfce(null); setErro(""); setTexto(""); setItensFiltrados([]); };
 
   const stepList: Step[] = ["colar", "preview", "success"];
   const stepLabels: Record<Step, string> = { colar: "Colar texto", preview: "Conferir", success: "Concluído" };
@@ -286,10 +290,15 @@ export default function ImportarNFCe() {
 
           <div>
             <p className="font-bold text-sm mb-2" style={{ color: "#01757A" }}>
-              {nfce.itens.length} {nfce.itens.length === 1 ? "item encontrado" : "itens encontrados"}
+              {itensFiltrados.length} {itensFiltrados.length === 1 ? "item encontrado" : "itens encontrados"}
             </p>
-            <div className="flex flex-col gap-2">
-              {nfce.itens.map((item, i) => (
+            {itensFiltrados.length === 0 && (
+              <div className="px-4 py-3 rounded-xl text-sm font-semibold text-center" style={{ background: "rgba(138,56,28,0.08)", color: "#8A381C" }}>
+                Todos os itens foram removidos.
+              </div>
+            )}
+          <div className="flex flex-col gap-2">
+              {itensFiltrados.map((item, i) => (
                 <div key={i} className="produto-card py-3 px-4 flex items-center justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-sm truncate">{item.nome}</p>
@@ -299,7 +308,9 @@ export default function ImportarNFCe() {
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <span className="badge-teal">{formatBRL(item.vl_total)}</span>
-                    <Plus size={14} style={{ color: "#01757A" }} />
+                    <button onClick={() => removerItem(i)} className="p-1 rounded-lg transition-all hover:opacity-80 shrink-0" style={{ color: "#8A381C" }} title="Remover item">
+                      <Trash2 size={15} />
+                    </button>
                   </div>
                 </div>
               ))}
