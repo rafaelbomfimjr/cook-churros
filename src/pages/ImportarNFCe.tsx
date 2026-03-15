@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { FileText, CheckCircle2, AlertCircle, Plus, ChevronRight, Link, ClipboardPaste } from "lucide-react";
+import { FileText, CheckCircle2, AlertCircle, Plus, ChevronRight, ClipboardPaste } from "lucide-react";
 
 interface ItemNFCe {
   nome: string;
@@ -46,7 +46,6 @@ function parseNFCeText(text: string): NFCeData {
   const emissaoM = text.match(/miss[aã]o[:\s]+([\d\/]+)/i);
   if (emissaoM) result.emissao = emissaoM[1];
 
-  // Normalizar e extrair itens
   const normalized = text
     .replace(/\r\n/g, "\n")
     .replace(/Vl\.\s*Total\s*\n\s*([\d,]+)/g, "Vl. Total $1")
@@ -77,73 +76,32 @@ function parseNFCeText(text: string): NFCeData {
   return result;
 }
 
-type Step = "input" | "preview" | "success";
-type Modo = "url" | "texto";
+type Step = "colar" | "preview" | "success";
 
 export default function ImportarNFCe() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [step, setStep] = useState<Step>("input");
-  const [modo, setModo] = useState<Modo>("url");
-  const [urlInput, setUrlInput] = useState("");
+  const [step, setStep] = useState<Step>("colar");
   const [texto, setTexto] = useState("");
   const [nfce, setNfce] = useState<NFCeData | null>(null);
   const [erro, setErro] = useState("");
-  const [loading, setLoading] = useState(false);
   const [salvando, setSalvando] = useState(false);
-  const [chaveIdentificada, setChaveIdentificada] = useState("");
 
-  // Receber dados do bookmarklet via URL (?data=...)
   useEffect(() => {
     const data = searchParams.get("data");
     if (!data) return;
     try {
       const parsed: NFCeData = JSON.parse(decodeURIComponent(data));
-      if (parsed.itens && parsed.itens.length > 0) {
-        setNfce(parsed);
-        setStep("preview");
-      }
+      if (parsed.itens?.length > 0) { setNfce(parsed); setStep("preview"); }
     } catch {}
   }, []);
 
-  const processarURL = () => {
-    setErro("");
-    const input = urlInput.trim();
-    if (!input) { setErro("Cole a URL do QR code da nota."); return; }
-
-    // Extrair chave da URL do QR code
-    // Padrão: ...QRCode?p=CHAVE44DIGITOS|...
-    let chave = "";
-    try {
-      const urlObj = new URL(input);
-      const p = urlObj.searchParams.get("p");
-      if (p) chave = p.split("|")[0].trim();
-    } catch {
-      // Pode ser só a chave digitada diretamente
-      const cleaned = input.replace(/\s/g, "");
-      if (/^\d{44}$/.test(cleaned)) chave = cleaned;
-    }
-
-    if (!chave || chave.length !== 44) {
-      setErro("URL inválida. Copie a URL completa da barra de endereço após ler o QR code.");
-      return;
-    }
-
-    // Temos a chave — agora orientar o usuário a copiar o texto da página
-    // (a página já está aberta no celular, é só Ctrl+A / Ctrl+C)
-    setUrlInput("");
-    setModo("texto");
-    setErro("");
-    // Colocar instrução especial com a chave identificada
-    setChaveIdentificada(chave);
-  };
-
-  const processarTexto = () => {
+  const processar = () => {
     setErro("");
     if (!texto.trim()) { setErro("Cole o texto da nota antes de continuar."); return; }
     const parsed = parseNFCeText(texto);
     if (parsed.itens.length === 0) {
-      setErro("Nenhum item encontrado. Certifique-se de copiar o texto completo da nota.");
+      setErro("Nenhum item encontrado. Copie o texto completo da página da nota.");
       return;
     }
     setNfce(parsed);
@@ -153,8 +111,8 @@ export default function ImportarNFCe() {
   const colarClipboard = async () => {
     try {
       const t = await navigator.clipboard.readText();
-      if (modo === "url") setUrlInput(t);
-      else setTexto(t);
+      setTexto(t);
+      setErro("");
     } catch {
       setErro("Não foi possível acessar o clipboard. Cole manualmente.");
     }
@@ -210,10 +168,10 @@ export default function ImportarNFCe() {
     }
   };
 
-  const resetar = () => { setStep("input"); setNfce(null); setErro(""); setUrlInput(""); setTexto(""); setChaveIdentificada(""); };
+  const resetar = () => { setStep("colar"); setNfce(null); setErro(""); setTexto(""); };
 
-  const stepList: Step[] = ["input", "preview", "success"];
-  const stepLabels: Record<Step, string> = { input: "Nota", preview: "Conferir", success: "Concluído" };
+  const stepList: Step[] = ["colar", "preview", "success"];
+  const stepLabels: Record<Step, string> = { colar: "Colar texto", preview: "Conferir", success: "Concluído" };
 
   return (
     <div className="max-w-2xl mx-auto py-8 px-4">
@@ -224,7 +182,7 @@ export default function ImportarNFCe() {
         </div>
         <div>
           <h1 className="text-2xl font-extrabold" style={{ color: "#01757A" }}>Importar NFC-e</h1>
-          <p className="text-xs text-muted-foreground">Cole a URL do QR code ou o texto da nota</p>
+          <p className="text-xs text-muted-foreground">Cole o texto da nota fiscal para importar insumos</p>
         </div>
       </div>
 
@@ -246,113 +204,40 @@ export default function ImportarNFCe() {
         ))}
       </div>
 
-      {/* ── STEP 1: INPUT ── */}
-      {step === "input" && (
+      {/* ── STEP 1: COLAR ── */}
+      {step === "colar" && (
         <div className="flex flex-col gap-4">
+          <div className="produto-card flex flex-col gap-3">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-lg shrink-0" style={{ background: "rgba(1,117,122,0.1)" }}>
+                <ClipboardPaste size={16} style={{ color: "#01757A" }} />
+              </div>
+              <div>
+                <p className="font-bold text-sm mb-1">Como fazer:</p>
+                <ol className="text-xs text-muted-foreground flex flex-col gap-1 list-decimal list-inside">
+                  <li>Abra a nota em <strong>fazenda.rj.gov.br/nfce/consulta</strong></li>
+                  <li>Selecione todo o texto da página <strong>(Ctrl+A)</strong></li>
+                  <li>Copie <strong>(Ctrl+C)</strong></li>
+                  <li>Cole aqui embaixo <strong>(Ctrl+V)</strong> ou clique no botão</li>
+                </ol>
+              </div>
+            </div>
 
-          {/* Tabs de modo */}
-          <div className="flex rounded-xl overflow-hidden border" style={{ borderColor: "hsl(var(--border))" }}>
-            <button
-              onClick={() => { setModo("url"); setErro(""); }}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-bold transition-all"
-              style={{
-                background: modo === "url" ? "#01757A" : "transparent",
-                color: modo === "url" ? "#fff" : "hsl(var(--muted-foreground))",
-              }}
-            >
-              <Link size={14} /> URL do QR Code
+            <button onClick={colarClipboard}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold border transition-all"
+              style={{ borderColor: "#01757A", color: "#01757A" }}>
+              <ClipboardPaste size={15} /> Colar do clipboard
             </button>
-            <button
-              onClick={() => { setModo("texto"); setErro(""); }}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-bold transition-all"
-              style={{
-                background: modo === "texto" ? "#01757A" : "transparent",
-                color: modo === "texto" ? "#fff" : "hsl(var(--muted-foreground))",
-              }}
-            >
-              <ClipboardPaste size={14} /> Colar Texto
-            </button>
+
+            <textarea
+              value={texto}
+              onChange={e => setTexto(e.target.value)}
+              placeholder="Cole o texto da nota aqui..."
+              className="inline-input w-full text-xs font-mono resize-none"
+              style={{ minHeight: "150px" }}
+            />
+            {texto && <p className="text-xs text-muted-foreground -mt-1">{texto.length} caracteres</p>}
           </div>
-
-          {/* Modo URL */}
-          {modo === "url" && (
-            <div className="produto-card flex flex-col gap-3">
-              <div className="flex items-start gap-3">
-                <div className="p-2 rounded-lg shrink-0" style={{ background: "rgba(1,117,122,0.1)" }}>
-                  <Link size={16} style={{ color: "#01757A" }} />
-                </div>
-                <div>
-                  <p className="font-bold text-sm mb-0.5">Como fazer:</p>
-                  <ol className="text-xs text-muted-foreground flex flex-col gap-1 list-decimal list-inside">
-                    <li>Leia o QR code da nota com o celular</li>
-                    <li>A nota abre no browser</li>
-                    <li>Copie a URL da barra de endereço</li>
-                    <li>Cole aqui embaixo</li>
-                  </ol>
-                </div>
-              </div>
-
-              <button onClick={colarClipboard}
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold border transition-all"
-                style={{ borderColor: "#01757A", color: "#01757A" }}>
-                <ClipboardPaste size={15} /> Colar URL do clipboard
-              </button>
-
-              <input
-                value={urlInput}
-                onChange={e => setUrlInput(e.target.value)}
-                placeholder="https://consultadfe.fazenda.rj.gov.br/consultaNFCe/QRCode?p=..."
-                className="inline-input w-full text-xs font-mono"
-                style={{ borderColor: "hsl(var(--border))" }}
-              />
-
-              <p className="text-xs text-muted-foreground -mt-1">
-                Ou cole direto os 44 dígitos da chave de acesso
-              </p>
-            </div>
-          )}
-
-          {/* Modo Texto */}
-          {modo === "texto" && (
-            <div className="produto-card flex flex-col gap-3">
-              <div className="flex items-start gap-3">
-                <div className="p-2 rounded-lg shrink-0" style={{ background: "rgba(138,56,28,0.08)" }}>
-                  <ClipboardPaste size={16} style={{ color: "#8A381C" }} />
-                </div>
-                <div>
-                  <p className="font-bold text-sm mb-0.5">Como fazer:</p>
-                  <ol className="text-xs text-muted-foreground flex flex-col gap-1 list-decimal list-inside">
-                    <li>Abra a nota em <strong>fazenda.rj.gov.br/nfce/consulta</strong></li>
-                    <li>Selecione tudo <strong>(Ctrl+A)</strong> e copie <strong>(Ctrl+C)</strong></li>
-                    <li>Cole aqui embaixo</li>
-                  </ol>
-                </div>
-              </div>
-
-              {chaveIdentificada && (
-                <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold"
-                  style={{ background: "rgba(1,117,122,0.1)", color: "#01757A" }}>
-                  ✅ Chave identificada: {chaveIdentificada.slice(0,8)}...{chaveIdentificada.slice(-8)}
-                  <br/>Agora selecione tudo na página da nota (Ctrl+A) e cole abaixo
-                </div>
-              )}
-
-              <button onClick={colarClipboard}
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold border transition-all"
-                style={{ borderColor: "#8A381C", color: "#8A381C" }}>
-                <ClipboardPaste size={15} /> Colar texto do clipboard
-              </button>
-
-              <textarea
-                value={texto}
-                onChange={e => setTexto(e.target.value)}
-                placeholder="Cole o texto da nota aqui..."
-                className="inline-input w-full text-xs font-mono resize-none"
-                style={{ minHeight: "130px" }}
-              />
-              {texto && <p className="text-xs text-muted-foreground -mt-1">{texto.length} caracteres</p>}
-            </div>
-          )}
 
           {erro && (
             <div className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold"
@@ -361,12 +246,8 @@ export default function ImportarNFCe() {
             </div>
           )}
 
-          <button
-            className="btn-primary w-full justify-center py-3"
-            onClick={modo === "url" ? processarURL : processarTexto}
-            disabled={loading}
-          >
-            {loading ? "Consultando nota..." : "Processar nota →"}
+          <button className="btn-primary w-full justify-center py-3" onClick={processar}>
+            Processar nota →
           </button>
         </div>
       )}
@@ -441,7 +322,7 @@ export default function ImportarNFCe() {
               {salvando ? "Salvando..." : "Confirmar e Importar"}
             </button>
             <button onClick={resetar}
-              className="px-4 py-2 rounded-xl text-sm font-bold border transition-all"
+              className="px-4 py-2 rounded-xl text-sm font-bold border"
               style={{ borderColor: "hsl(var(--border))" }}>
               Voltar
             </button>
@@ -458,9 +339,7 @@ export default function ImportarNFCe() {
           </div>
           <div>
             <p className="font-extrabold text-lg" style={{ color: "#01757A" }}>Nota importada!</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Os novos itens foram adicionados aos insumos.
-            </p>
+            <p className="text-sm text-muted-foreground mt-1">Os novos itens foram adicionados aos insumos.</p>
           </div>
           <div className="flex gap-3">
             <button className="btn-primary" onClick={() => navigate("/")}>Ver Insumos</button>
