@@ -73,9 +73,14 @@ function parseNFCeText(text: string): NFCeData {
     // Remover números/símbolos soltos no início
     antes = antes.replace(/^[\s\d,.\/*\-]+/, "").trim();
 
+    // Remover "Filtrar itens..." e qualquer texto de UI antes do nome real
+    antes = antes.replace(/^.*?\.\.\.\s*/,'').trim();
+    // Remover números/símbolos soltos que ainda possam restar
+    antes = antes.replace(/^[\s\d,.\/*\-]+/, '').trim();
+
     if (!antes || antes.length < 3) continue;
     // Ignorar strings que são claramente elementos da página, não produtos
-    const lixo = /filtrar|consulta|document|auxiliar|nota fiscal|consumidor|eletr[ôo]nica|fazenda|sefaz/i;
+    const lixo = /^(filtrar|consulta|document|auxiliar|nota fiscal|consumidor|eletr[ôo]nica|fazenda|sefaz)/i;
     if (lixo.test(antes)) continue;
 
     const bloco = normalized.slice(pos.end, posicoes[i + 1]?.idx ?? normalized.length);
