@@ -91,6 +91,7 @@ export default function ImportarNFCe() {
   const [erro, setErro] = useState("");
   const [loading, setLoading] = useState(false);
   const [salvando, setSalvando] = useState(false);
+  const [chaveIdentificada, setChaveIdentificada] = useState("");
 
   // Receber dados do bookmarklet via URL (?data=...)
   useEffect(() => {
@@ -105,7 +106,7 @@ export default function ImportarNFCe() {
     } catch {}
   }, []);
 
-  const processarURL = async () => {
+  const processarURL = () => {
     setErro("");
     const input = urlInput.trim();
     if (!input) { setErro("Cole a URL do QR code da nota."); return; }
@@ -128,22 +129,13 @@ export default function ImportarNFCe() {
       return;
     }
 
-    setLoading(true);
-    try {
-      const res = await fetch("/api/consulta-nfce", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chave }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? `Erro ${res.status}`);
-      setNfce(data);
-      setStep("preview");
-    } catch (e: unknown) {
-      setErro(e instanceof Error ? e.message : "Erro ao consultar nota.");
-    } finally {
-      setLoading(false);
-    }
+    // Temos a chave — agora orientar o usuário a copiar o texto da página
+    // (a página já está aberta no celular, é só Ctrl+A / Ctrl+C)
+    setUrlInput("");
+    setModo("texto");
+    setErro("");
+    // Colocar instrução especial com a chave identificada
+    setChaveIdentificada(chave);
   };
 
   const processarTexto = () => {
@@ -218,7 +210,7 @@ export default function ImportarNFCe() {
     }
   };
 
-  const resetar = () => { setStep("input"); setNfce(null); setErro(""); setUrlInput(""); setTexto(""); };
+  const resetar = () => { setStep("input"); setNfce(null); setErro(""); setUrlInput(""); setTexto(""); setChaveIdentificada(""); };
 
   const stepList: Step[] = ["input", "preview", "success"];
   const stepLabels: Record<Step, string> = { input: "Nota", preview: "Conferir", success: "Concluído" };
@@ -336,6 +328,14 @@ export default function ImportarNFCe() {
                   </ol>
                 </div>
               </div>
+
+              {chaveIdentificada && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold"
+                  style={{ background: "rgba(1,117,122,0.1)", color: "#01757A" }}>
+                  ✅ Chave identificada: {chaveIdentificada.slice(0,8)}...{chaveIdentificada.slice(-8)}
+                  <br/>Agora selecione tudo na página da nota (Ctrl+A) e cole abaixo
+                </div>
+              )}
 
               <button onClick={colarClipboard}
                 className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold border transition-all"
