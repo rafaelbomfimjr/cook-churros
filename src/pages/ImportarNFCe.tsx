@@ -74,6 +74,9 @@ function parseNFCeText(text: string): NFCeData {
     antes = antes.replace(/^[\s\d,.\/*\-]+/, "").trim();
 
     if (!antes || antes.length < 3) continue;
+    // Ignorar strings que são claramente elementos da página, não produtos
+    const lixo = /filtrar|consulta|document|auxiliar|nota fiscal|consumidor|eletr[ôo]nica|fazenda|sefaz/i;
+    if (lixo.test(antes)) continue;
 
     const bloco = normalized.slice(pos.end, posicoes[i + 1]?.idx ?? normalized.length);
     const qtdeM = bloco.match(/Qtde\.:\s*([\d,]+)/);
