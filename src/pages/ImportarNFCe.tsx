@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { FileText, CheckCircle2, AlertCircle, Plus, ChevronRight, ClipboardPaste } from "lucide-react";
+import { FileText, CheckCircle2, AlertCircle, Plus, ChevronRight, Link, ClipboardPaste } from "lucide-react";
 
 interface ItemNFCe {
   nome: string;
@@ -32,8 +32,6 @@ function parseNFCeText(text: string): NFCeData {
   };
 
   const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
-
-  // Fornecedor e CNPJ
   for (let i = 0; i < lines.length; i++) {
     if (lines[i].includes("CNPJ:")) {
       const m = lines[i].match(/CNPJ:\s*([\d.\/-]+)/);
@@ -43,20 +41,18 @@ function parseNFCeText(text: string): NFCeData {
     }
   }
 
-  // Chave e Emissão
   const chaveM = text.match(/Chave de acesso:\s*([\d\s]{40,60})/);
   if (chaveM) result.chave = chaveM[1].replace(/\s/g, "").trim();
   const emissaoM = text.match(/miss[aã]o[:\s]+([\d\/]+)/i);
   if (emissaoM) result.emissao = emissaoM[1];
 
-  // Normalizar: juntar "Vl. Total\n4,19" e colapsar quebras de linha
+  // Normalizar e extrair itens
   const normalized = text
     .replace(/\r\n/g, "\n")
     .replace(/Vl\.\s*Total\s*\n\s*([\d,]+)/g, "Vl. Total $1")
     .replace(/\n/g, " ")
     .replace(/\s+/g, " ");
 
-  // Regex robusto: aceita espaços opcionais em qualquer ponto
   const itemRe = /(.+?)\(C[oó]digo:\s*\d+\s*\)\s*Qtde\.:\s*(\d+)\s*UN:\s*([A-Z]+)\s*Vl\.\s*Unit\.:\s*([\d,]+)\s*Vl\.\s*Total\s*([\d,]+)/gi;
   let m: RegExpExecArray | null;
   while ((m = itemRe.exec(normalized)) !== null) {
@@ -71,7 +67,6 @@ function parseNFCeText(text: string): NFCeData {
     });
   }
 
-  // Totais
   const totalM = text.match(/Valor total R\$[:\s]*([\d,]+)/);
   if (totalM) result.total = parseFloat(totalM[1].replace(",", "."));
   const descM = text.match(/Descontos R\$[:\s]*([\d,]+)/);
@@ -82,15 +77,19 @@ function parseNFCeText(text: string): NFCeData {
   return result;
 }
 
-type Step = "paste" | "preview" | "success";
+type Step = "input" | "preview" | "success";
+type Modo = "url" | "texto";
 
 export default function ImportarNFCe() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [step, setStep] = useState<Step>("paste");
+  const [step, setStep] = useState<Step>("input");
+  const [modo, setModo] = useState<Modo>("url");
+  const [urlInput, setUrlInput] = useState("");
   const [texto, setTexto] = useState("");
   const [nfce, setNfce] = useState<NFCeData | null>(null);
   const [erro, setErro] = useState("");
+  const [loading, setLoading] = useState(false);
   const [salvando, setSalvando] = useState(false);
 
   // Receber dados do bookmarklet via URL (?data=...)
@@ -106,24 +105,66 @@ export default function ImportarNFCe() {
     } catch {}
   }, []);
 
-  const processar = () => {
+  const processarURL = async () => {
+    setErro("");
+    const input = urlInput.trim();
+    if (!input) { setErro("Cole a URL do QR code da nota."); return; }
+
+    // Extrair chave da URL do QR code
+    // Padrão: ...QRCode?p=CHAVE44DIGITOS|...
+    let chave = "";
+    try {
+      const urlObj = new URL(input);
+      const p = urlObj.searchParams.get("p");
+      if (p) chave = p.split("|")[0].trim();
+    } catch {
+      // Pode ser só a chave digitada diretamente
+      const cleaned = input.replace(/\s/g, "");
+      if (/^\d{44}$/.test(cleaned)) chave = cleaned;
+    }
+
+    if (!chave || chave.length !== 44) {
+      setErro("URL inválida. Copie a URL completa da barra de endereço após ler o QR code.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch("/api/consulta-nfce", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chave }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? `Erro ${res.status}`);
+      setNfce(data);
+      setStep("preview");
+    } catch (e: unknown) {
+      setErro(e instanceof Error ? e.message : "Erro ao consultar nota.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const processarTexto = () => {
     setErro("");
     if (!texto.trim()) { setErro("Cole o texto da nota antes de continuar."); return; }
     const parsed = parseNFCeText(texto);
     if (parsed.itens.length === 0) {
-      setErro("Nenhum item encontrado. Certifique-se de copiar o texto completo da nota, incluindo os produtos.");
+      setErro("Nenhum item encontrado. Certifique-se de copiar o texto completo da nota.");
       return;
     }
     setNfce(parsed);
     setStep("preview");
   };
 
-  const colarDoClipboard = async () => {
+  const colarClipboard = async () => {
     try {
       const t = await navigator.clipboard.readText();
-      setTexto(t);
+      if (modo === "url") setUrlInput(t);
+      else setTexto(t);
     } catch {
-      setErro("Não foi possível acessar o clipboard. Cole manualmente no campo abaixo.");
+      setErro("Não foi possível acessar o clipboard. Cole manualmente.");
     }
   };
 
@@ -177,10 +218,10 @@ export default function ImportarNFCe() {
     }
   };
 
-  const resetar = () => { setStep("paste"); setNfce(null); setErro(""); setTexto(""); };
+  const resetar = () => { setStep("input"); setNfce(null); setErro(""); setUrlInput(""); setTexto(""); };
 
-  const stepList: Step[] = ["paste", "preview", "success"];
-  const stepLabels: Record<Step, string> = { paste: "Colar texto", preview: "Conferir", success: "Concluído" };
+  const stepList: Step[] = ["input", "preview", "success"];
+  const stepLabels: Record<Step, string> = { input: "Nota", preview: "Conferir", success: "Concluído" };
 
   return (
     <div className="max-w-2xl mx-auto py-8 px-4">
@@ -191,9 +232,7 @@ export default function ImportarNFCe() {
         </div>
         <div>
           <h1 className="text-2xl font-extrabold" style={{ color: "#01757A" }}>Importar NFC-e</h1>
-          <p className="text-xs text-muted-foreground">
-            Cole o texto copiado da nota fiscal para importar insumos
-          </p>
+          <p className="text-xs text-muted-foreground">Cole a URL do QR code ou o texto da nota</p>
         </div>
       </div>
 
@@ -215,54 +254,105 @@ export default function ImportarNFCe() {
         ))}
       </div>
 
-      {/* ── STEP 1: COLAR TEXTO ── */}
-      {step === "paste" && (
+      {/* ── STEP 1: INPUT ── */}
+      {step === "input" && (
         <div className="flex flex-col gap-4">
-          <div className="produto-card">
-            <div className="flex items-start gap-3 mb-4">
-              <div className="p-2 rounded-lg shrink-0" style={{ background: "rgba(138,56,28,0.08)" }}>
-                <ClipboardPaste size={16} style={{ color: "#8A381C" }} />
-              </div>
-              <div>
-                <p className="font-bold text-sm mb-0.5">Como fazer:</p>
-                <ol className="text-xs text-muted-foreground flex flex-col gap-1 list-decimal list-inside">
-                  <li>Abra a nota em <strong>fazenda.rj.gov.br/nfce/consulta</strong></li>
-                  <li>Selecione todo o texto da página (<strong>Ctrl+A</strong>)</li>
-                  <li>Copie (<strong>Ctrl+C</strong>)</li>
-                  <li>Cole aqui embaixo (<strong>Ctrl+V</strong>) ou clique no botão</li>
-                </ol>
-              </div>
-            </div>
 
+          {/* Tabs de modo */}
+          <div className="flex rounded-xl overflow-hidden border" style={{ borderColor: "hsl(var(--border))" }}>
             <button
-              onClick={colarDoClipboard}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold mb-3 transition-all border"
-              style={{ borderColor: "#01757A", color: "#01757A" }}
-            >
-              <ClipboardPaste size={15} /> Colar do clipboard automaticamente
-            </button>
-
-            <textarea
-              value={texto}
-              onChange={e => setTexto(e.target.value)}
-              placeholder="Ou cole o texto da nota aqui manualmente..."
-              className="w-full rounded-xl p-3 text-xs font-mono resize-none outline-none border transition-colors"
+              onClick={() => { setModo("url"); setErro(""); }}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-bold transition-all"
               style={{
-                minHeight: "160px",
-                borderColor: "hsl(var(--border))",
-                background: "hsl(var(--muted))",
-                color: "hsl(var(--foreground))",
+                background: modo === "url" ? "#01757A" : "transparent",
+                color: modo === "url" ? "#fff" : "hsl(var(--muted-foreground))",
               }}
-              onFocus={e => (e.target.style.borderColor = "#01757A")}
-              onBlur={e => (e.target.style.borderColor = "hsl(var(--border))")}
-            />
-
-            {texto && (
-              <p className="text-xs text-muted-foreground mt-1.5">
-                {texto.length} caracteres colados
-              </p>
-            )}
+            >
+              <Link size={14} /> URL do QR Code
+            </button>
+            <button
+              onClick={() => { setModo("texto"); setErro(""); }}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-bold transition-all"
+              style={{
+                background: modo === "texto" ? "#01757A" : "transparent",
+                color: modo === "texto" ? "#fff" : "hsl(var(--muted-foreground))",
+              }}
+            >
+              <ClipboardPaste size={14} /> Colar Texto
+            </button>
           </div>
+
+          {/* Modo URL */}
+          {modo === "url" && (
+            <div className="produto-card flex flex-col gap-3">
+              <div className="flex items-start gap-3">
+                <div className="p-2 rounded-lg shrink-0" style={{ background: "rgba(1,117,122,0.1)" }}>
+                  <Link size={16} style={{ color: "#01757A" }} />
+                </div>
+                <div>
+                  <p className="font-bold text-sm mb-0.5">Como fazer:</p>
+                  <ol className="text-xs text-muted-foreground flex flex-col gap-1 list-decimal list-inside">
+                    <li>Leia o QR code da nota com o celular</li>
+                    <li>A nota abre no browser</li>
+                    <li>Copie a URL da barra de endereço</li>
+                    <li>Cole aqui embaixo</li>
+                  </ol>
+                </div>
+              </div>
+
+              <button onClick={colarClipboard}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold border transition-all"
+                style={{ borderColor: "#01757A", color: "#01757A" }}>
+                <ClipboardPaste size={15} /> Colar URL do clipboard
+              </button>
+
+              <input
+                value={urlInput}
+                onChange={e => setUrlInput(e.target.value)}
+                placeholder="https://consultadfe.fazenda.rj.gov.br/consultaNFCe/QRCode?p=..."
+                className="inline-input w-full text-xs font-mono"
+                style={{ borderColor: "hsl(var(--border))" }}
+              />
+
+              <p className="text-xs text-muted-foreground -mt-1">
+                Ou cole direto os 44 dígitos da chave de acesso
+              </p>
+            </div>
+          )}
+
+          {/* Modo Texto */}
+          {modo === "texto" && (
+            <div className="produto-card flex flex-col gap-3">
+              <div className="flex items-start gap-3">
+                <div className="p-2 rounded-lg shrink-0" style={{ background: "rgba(138,56,28,0.08)" }}>
+                  <ClipboardPaste size={16} style={{ color: "#8A381C" }} />
+                </div>
+                <div>
+                  <p className="font-bold text-sm mb-0.5">Como fazer:</p>
+                  <ol className="text-xs text-muted-foreground flex flex-col gap-1 list-decimal list-inside">
+                    <li>Abra a nota em <strong>fazenda.rj.gov.br/nfce/consulta</strong></li>
+                    <li>Selecione tudo <strong>(Ctrl+A)</strong> e copie <strong>(Ctrl+C)</strong></li>
+                    <li>Cole aqui embaixo</li>
+                  </ol>
+                </div>
+              </div>
+
+              <button onClick={colarClipboard}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold border transition-all"
+                style={{ borderColor: "#8A381C", color: "#8A381C" }}>
+                <ClipboardPaste size={15} /> Colar texto do clipboard
+              </button>
+
+              <textarea
+                value={texto}
+                onChange={e => setTexto(e.target.value)}
+                placeholder="Cole o texto da nota aqui..."
+                className="inline-input w-full text-xs font-mono resize-none"
+                style={{ minHeight: "130px" }}
+              />
+              {texto && <p className="text-xs text-muted-foreground -mt-1">{texto.length} caracteres</p>}
+            </div>
+          )}
 
           {erro && (
             <div className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold"
@@ -271,8 +361,12 @@ export default function ImportarNFCe() {
             </div>
           )}
 
-          <button className="btn-primary w-full justify-center py-3" onClick={processar}>
-            Processar nota →
+          <button
+            className="btn-primary w-full justify-center py-3"
+            onClick={modo === "url" ? processarURL : processarTexto}
+            disabled={loading}
+          >
+            {loading ? "Consultando nota..." : "Processar nota →"}
           </button>
         </div>
       )}
@@ -281,19 +375,16 @@ export default function ImportarNFCe() {
       {step === "preview" && nfce && (
         <div className="flex flex-col gap-4">
           <div className="produto-card">
-            <div>
-              <p className="font-extrabold text-base" style={{ color: "#01757A" }}>
-                {nfce.fornecedor || "Fornecedor não identificado"}
+            <p className="font-extrabold text-base" style={{ color: "#01757A" }}>
+              {nfce.fornecedor || "Fornecedor não identificado"}
+            </p>
+            {nfce.cnpj && <p className="text-xs text-muted-foreground mt-0.5">CNPJ: {nfce.cnpj}</p>}
+            {nfce.emissao && <p className="text-xs text-muted-foreground">Emissão: {nfce.emissao}</p>}
+            {nfce.chave && (
+              <p className="font-mono mt-1 break-all" style={{ color: "#8A381C", fontSize: "10px" }}>
+                {nfce.chave}
               </p>
-              {nfce.cnpj && <p className="text-xs text-muted-foreground mt-0.5">CNPJ: {nfce.cnpj}</p>}
-              {nfce.emissao && <p className="text-xs text-muted-foreground">Emissão: {nfce.emissao}</p>}
-              {nfce.chave && (
-                <p className="font-mono mt-1 break-all" style={{ color: "#8A381C", fontSize: "10px" }}>
-                  {nfce.chave}
-                </p>
-              )}
-            </div>
-
+            )}
             {(nfce.total > 0 || nfce.valor_pagar > 0) && (
               <div className="grid grid-cols-3 gap-3 mt-4">
                 <div className="stat-card py-2.5">
@@ -302,15 +393,11 @@ export default function ImportarNFCe() {
                 </div>
                 <div className="stat-card py-2.5">
                   <span className="stat-label">Desconto</span>
-                  <span className="font-extrabold text-sm" style={{ color: "#8A381C" }}>
-                    -{formatBRL(nfce.desconto)}
-                  </span>
+                  <span className="font-extrabold text-sm" style={{ color: "#8A381C" }}>-{formatBRL(nfce.desconto)}</span>
                 </div>
                 <div className="stat-card py-2.5">
                   <span className="stat-label">Pago</span>
-                  <span className="font-extrabold text-sm" style={{ color: "#01757A" }}>
-                    {formatBRL(nfce.valor_pagar)}
-                  </span>
+                  <span className="font-extrabold text-sm" style={{ color: "#01757A" }}>{formatBRL(nfce.valor_pagar)}</span>
                 </div>
               </div>
             )}
@@ -339,7 +426,7 @@ export default function ImportarNFCe() {
           </div>
 
           <p className="text-xs text-muted-foreground text-center">
-            Itens novos serão adicionados aos insumos. Os já cadastrados serão ignorados.
+            Itens novos serão adicionados. Os já cadastrados serão ignorados.
           </p>
 
           {erro && (
@@ -370,7 +457,7 @@ export default function ImportarNFCe() {
             <CheckCircle2 size={32} style={{ color: "#01757A" }} />
           </div>
           <div>
-            <p className="font-extrabold text-lg" style={{ color: "#01757A" }}>Nota importada com sucesso!</p>
+            <p className="font-extrabold text-lg" style={{ color: "#01757A" }}>Nota importada!</p>
             <p className="text-sm text-muted-foreground mt-1">
               Os novos itens foram adicionados aos insumos.
             </p>
