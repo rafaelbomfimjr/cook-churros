@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { Upload, FileText, CheckCircle2, AlertCircle, X, Plus, ChevronRight } from "lucide-react";
 
 interface ItemNFCe {
@@ -20,67 +21,6 @@ interface NFCeData {
   valor_pagar: number;
 }
 
-function parseNFCeText(text: string): NFCeData {
-  const result: NFCeData = {
-    fornecedor: "", cnpj: "", emissao: "", chave: "",
-    itens: [], total: 0, desconto: 0, valor_pagar: 0,
-  };
-
-  const lines = text.split("\n");
-
-  // Fornecedor e CNPJ
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].includes("CNPJ:")) {
-      const m = lines[i].match(/CNPJ:\s*([\d./-]+)/);
-      if (m) result.cnpj = m[1];
-      // fornecedor é a linha anterior que não seja cabeçalho
-      for (let j = i - 1; j >= 0; j--) {
-        const l = lines[j].trim();
-        if (l && !l.includes("Consulta DF") && !l.includes("http")) {
-          result.fornecedor = l;
-          break;
-        }
-      }
-      break;
-    }
-  }
-
-  // Chave de acesso
-  const chaveMatch = text.match(/Chave de acesso:\s*([\d\s]{40,60})/);
-  if (chaveMatch) result.chave = chaveMatch[1].replace(/\s/g, "").trim();
-
-  // Emissão
-  const emissaoMatch = text.match(/Emissão:\s*([\d/]+)/);
-  if (emissaoMatch) result.emissao = emissaoMatch[1];
-
-  // Itens — ex: "NOME PRODUTO (Código: XXXX ) Vl. Total\nQtde.:9 UN: PCE Vl. Unit.: 1,99 17,91"
-  const itemRegex = /^(.+?)\s*\(Código:.*?\)\s*Vl\.\s*Total\s*\nQtde\.:(\d+)\s+UN:\s*(\w+)\s+Vl\.\s*Unit\.:\s*([\d,]+)\s+([\d,]+)/gm;
-  let m: RegExpExecArray | null;
-  while ((m = itemRegex.exec(text)) !== null) {
-    let nome = m[1].trim();
-    // remover lixo de cabeçalho que pode vir junto
-    nome = nome.split("\n").pop()?.trim() ?? nome;
-    nome = nome.replace(/^.*Consulta DF-e\s*/i, "").trim();
-    result.itens.push({
-      nome,
-      quantidade: parseInt(m[2]),
-      unidade: m[3],
-      vl_unit: parseFloat(m[4].replace(",", ".")),
-      vl_total: parseFloat(m[5].replace(",", ".")),
-    });
-  }
-
-  // Totais
-  const totalM = text.match(/Valor total R\$:\s*([\d,]+)/);
-  if (totalM) result.total = parseFloat(totalM[1].replace(",", "."));
-  const descM = text.match(/Descontos R\$:\s*([\d,]+)/);
-  if (descM) result.desconto = parseFloat(descM[1].replace(",", "."));
-  const pagarM = text.match(/Valor a pagar R\$:\s*([\d,]+)/);
-  if (pagarM) result.valor_pagar = parseFloat(pagarM[1].replace(",", "."));
-
-  return result;
-}
-
 function formatBRL(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
@@ -88,6 +28,7 @@ function formatBRL(v: number) {
 type Step = "upload" | "preview" | "success";
 
 export default function ImportarNFCe() {
+  const navigate = useNavigate();
   const [step, setStep] = useState<Step>("upload");
   const [nfce, setNfce] = useState<NFCeData | null>(null);
   const [erro, setErro] = useState("");
@@ -97,7 +38,7 @@ export default function ImportarNFCe() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const processFile = async (file: File) => {
-    if (!file.name.endsWith(".pdf")) {
+    if (!file.name.toLowerCase().endsWith(".pdf")) {
       setErro("Por favor, envie um arquivo PDF.");
       return;
     }
@@ -105,7 +46,6 @@ export default function ImportarNFCe() {
     setErro("");
 
     try {
-      // Ler PDF como base64
       const base64 = await new Promise<string>((res, rej) => {
         const reader = new FileReader();
         reader.onload = () => res((reader.result as string).split(",")[1]);
@@ -113,53 +53,20 @@ export default function ImportarNFCe() {
         reader.readAsDataURL(file);
       });
 
-      // Enviar para Claude API para extrair o texto estruturado
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
+      // Chama a API serverless (sem CORS)
+      const response = await fetch("/api/parse-nfce", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1000,
-          messages: [{
-            role: "user",
-            content: [
-              {
-                type: "document",
-                source: { type: "base64", media_type: "application/pdf", data: base64 }
-              },
-              {
-                type: "text",
-                text: `Extraia os dados desta NFC-e e retorne APENAS um JSON válido (sem markdown, sem texto extra) com este formato exato:
-{
-  "fornecedor": "nome da loja",
-  "cnpj": "XX.XXX.XXX/XXXX-XX",
-  "emissao": "DD/MM/AAAA",
-  "chave": "44 dígitos sem espaço",
-  "itens": [
-    {
-      "nome": "NOME DO PRODUTO",
-      "quantidade": 9,
-      "unidade": "PCE",
-      "vl_unit": 1.99,
-      "vl_total": 17.91
-    }
-  ],
-  "total": 55.87,
-  "desconto": 12.89,
-  "valor_pagar": 42.98
-}`
-              }
-            ]
-          }]
-        })
+        body: JSON.stringify({ base64 }),
       });
 
-      const data = await response.json();
-      const raw = data.content?.[0]?.text ?? "";
-      const clean = raw.replace(/```json|```/g, "").trim();
-      const parsed: NFCeData = JSON.parse(clean);
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error ?? `Erro ${response.status}`);
+      }
 
-      // fallback: se Claude não retornar itens, tenta parser local via texto
+      const parsed: NFCeData = await response.json();
+
       if (!parsed.itens || parsed.itens.length === 0) {
         throw new Error("Nenhum item encontrado na nota.");
       }
@@ -183,16 +90,15 @@ export default function ImportarNFCe() {
   const salvarInsumos = async () => {
     if (!nfce) return;
     setSalvando(true);
+    setErro("");
 
     try {
-      // Buscar insumos atuais
       const res = await fetch("/api/insumos");
       const insumos: Array<{
         nome: string; qtdeCompra: number; medidaCompra: string;
         precoCompra: number; qtdeUtil: number; medidaUtil: string;
       }> = (await res.json()) ?? [];
 
-      // Mapear unidade da nota para medida do sistema
       const mapMedida = (un: string): string => {
         const u = un.toUpperCase();
         if (u === "KG") return "kg";
@@ -202,8 +108,6 @@ export default function ImportarNFCe() {
         return "un";
       };
 
-      // Adicionar itens novos (que não existem ainda)
-      let adicionados = 0;
       for (const item of nfce.itens) {
         const jaExiste = insumos.some(
           (ins) => ins.nome.toLowerCase().trim() === item.nome.toLowerCase().trim()
@@ -218,7 +122,6 @@ export default function ImportarNFCe() {
             qtdeUtil: item.quantidade,
             medidaUtil: medida,
           });
-          adicionados++;
         }
       }
 
@@ -242,6 +145,9 @@ export default function ImportarNFCe() {
     setErro("");
   };
 
+  const stepList: Step[] = ["upload", "preview", "success"];
+  const stepLabels = { upload: "Upload", preview: "Conferir", success: "Concluído" };
+
   return (
     <div className="max-w-2xl mx-auto py-8 px-4">
       {/* Header */}
@@ -261,19 +167,20 @@ export default function ImportarNFCe() {
 
       {/* Steps */}
       <div className="flex items-center gap-2 mb-7 text-xs font-bold">
-        {(["upload", "preview", "success"] as Step[]).map((s, i) => (
+        {stepList.map((s, i) => (
           <div key={s} className="flex items-center gap-2">
-            <div className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs transition-all ${
-              step === s
-                ? "text-white"
-                : i < ["upload","preview","success"].indexOf(step) ? "text-white opacity-60" : "text-muted-foreground"
-            }`} style={{
-              background: step === s ? "#01757A" : i < ["upload","preview","success"].indexOf(step) ? "#01757A" : "hsl(var(--muted))"
-            }}>
+            <div
+              className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-all"
+              style={{
+                background: step === s ? "#01757A" : i < stepList.indexOf(step) ? "#01757A" : "hsl(var(--muted))",
+                color: step === s || i < stepList.indexOf(step) ? "#fff" : "hsl(var(--muted-foreground))",
+                opacity: i < stepList.indexOf(step) ? 0.6 : 1,
+              }}
+            >
               {i + 1}
             </div>
             <span className={step === s ? "font-bold" : "text-muted-foreground"}>
-              {s === "upload" ? "Upload" : s === "preview" ? "Conferir" : "Concluído"}
+              {stepLabels[s]}
             </span>
             {i < 2 && <ChevronRight size={14} className="text-muted-foreground" />}
           </div>
@@ -284,15 +191,16 @@ export default function ImportarNFCe() {
       {step === "upload" && (
         <div>
           <div
-            className={`border-2 border-dashed rounded-2xl p-10 flex flex-col items-center gap-4 cursor-pointer transition-all ${drag ? "scale-[1.01]" : ""}`}
+            className="border-2 border-dashed rounded-2xl p-10 flex flex-col items-center gap-4 cursor-pointer transition-all"
             style={{
               borderColor: drag ? "#01757A" : "hsl(var(--border))",
               background: drag ? "rgba(1,117,122,0.05)" : "hsl(var(--card))",
+              transform: drag ? "scale(1.01)" : "scale(1)",
             }}
             onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
             onDragLeave={() => setDrag(false)}
             onDrop={onDrop}
-            onClick={() => inputRef.current?.click()}
+            onClick={() => !loading && inputRef.current?.click()}
           >
             <input
               ref={inputRef}
@@ -304,16 +212,23 @@ export default function ImportarNFCe() {
 
             {loading ? (
               <div className="flex flex-col items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl flex items-center justify-center animate-pulse"
-                  style={{ background: "rgba(1,117,122,0.15)" }}>
+                <div
+                  className="w-12 h-12 rounded-2xl flex items-center justify-center animate-pulse"
+                  style={{ background: "rgba(1,117,122,0.15)" }}
+                >
                   <FileText size={24} style={{ color: "#01757A" }} />
                 </div>
-                <p className="font-bold text-sm" style={{ color: "#01757A" }}>Lendo nota fiscal...</p>
+                <p className="font-bold text-sm" style={{ color: "#01757A" }}>
+                  Lendo nota fiscal...
+                </p>
+                <p className="text-xs text-muted-foreground">Isso pode levar alguns segundos</p>
               </div>
             ) : (
               <>
-                <div className="w-14 h-14 rounded-2xl flex items-center justify-center"
-                  style={{ background: "rgba(1,117,122,0.1)" }}>
+                <div
+                  className="w-14 h-14 rounded-2xl flex items-center justify-center"
+                  style={{ background: "rgba(1,117,122,0.1)" }}
+                >
                   <Upload size={26} style={{ color: "#01757A" }} />
                 </div>
                 <div className="text-center">
@@ -322,8 +237,10 @@ export default function ImportarNFCe() {
                     PDF da Consulta DF-e (fazenda.rj.gov.br/nfce/consulta)
                   </p>
                 </div>
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold"
-                  style={{ background: "rgba(138,56,28,0.08)", color: "#8A381C" }}>
+                <div
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold"
+                  style={{ background: "rgba(138,56,28,0.08)", color: "#8A381C" }}
+                >
                   💡 Salve como PDF no navegador ao consultar a nota pelo site
                 </div>
               </>
@@ -331,8 +248,10 @@ export default function ImportarNFCe() {
           </div>
 
           {erro && (
-            <div className="mt-4 flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold"
-              style={{ background: "rgba(138,56,28,0.08)", color: "#8A381C" }}>
+            <div
+              className="mt-4 flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold"
+              style={{ background: "rgba(138,56,28,0.08)", color: "#8A381C" }}
+            >
               <AlertCircle size={16} /> {erro}
             </div>
           )}
@@ -342,7 +261,6 @@ export default function ImportarNFCe() {
       {/* ── STEP 2: PREVIEW ── */}
       {step === "preview" && nfce && (
         <div className="flex flex-col gap-4">
-          {/* Info da nota */}
           <div className="produto-card">
             <div className="flex items-start justify-between gap-2">
               <div>
@@ -352,7 +270,7 @@ export default function ImportarNFCe() {
                 <p className="text-xs text-muted-foreground mt-0.5">CNPJ: {nfce.cnpj}</p>
                 <p className="text-xs text-muted-foreground">Emissão: {nfce.emissao}</p>
                 {nfce.chave && (
-                  <p className="text-xs font-mono mt-1 break-all" style={{ color: "#8A381C", fontSize: "10px" }}>
+                  <p className="font-mono mt-1 break-all" style={{ color: "#8A381C", fontSize: "10px" }}>
                     {nfce.chave}
                   </p>
                 )}
@@ -369,16 +287,19 @@ export default function ImportarNFCe() {
               </div>
               <div className="stat-card py-2.5">
                 <span className="stat-label">Desconto</span>
-                <span className="font-extrabold text-sm" style={{ color: "#8A381C" }}>-{formatBRL(nfce.desconto)}</span>
+                <span className="font-extrabold text-sm" style={{ color: "#8A381C" }}>
+                  -{formatBRL(nfce.desconto)}
+                </span>
               </div>
               <div className="stat-card py-2.5">
                 <span className="stat-label">Pago</span>
-                <span className="font-extrabold text-sm" style={{ color: "#01757A" }}>{formatBRL(nfce.valor_pagar)}</span>
+                <span className="font-extrabold text-sm" style={{ color: "#01757A" }}>
+                  {formatBRL(nfce.valor_pagar)}
+                </span>
               </div>
             </div>
           </div>
 
-          {/* Itens */}
           <div>
             <p className="font-bold text-sm mb-2" style={{ color: "#01757A" }}>
               {nfce.itens.length} {nfce.itens.length === 1 ? "item encontrado" : "itens encontrados"}
@@ -402,13 +323,14 @@ export default function ImportarNFCe() {
           </div>
 
           <p className="text-xs text-muted-foreground text-center px-4">
-            Itens que ainda não existem nos insumos serão adicionados automaticamente.
-            Os já cadastrados serão ignorados.
+            Itens novos serão adicionados aos insumos. Os já cadastrados serão ignorados.
           </p>
 
           {erro && (
-            <div className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold"
-              style={{ background: "rgba(138,56,28,0.08)", color: "#8A381C" }}>
+            <div
+              className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold"
+              style={{ background: "rgba(138,56,28,0.08)", color: "#8A381C" }}
+            >
               <AlertCircle size={16} /> {erro}
             </div>
           )}
@@ -417,9 +339,11 @@ export default function ImportarNFCe() {
             <button className="btn-primary flex-1" onClick={salvarInsumos} disabled={salvando}>
               {salvando ? "Salvando..." : "Confirmar e Importar"}
             </button>
-            <button onClick={resetar}
+            <button
+              onClick={resetar}
               className="px-4 py-2 rounded-xl text-sm font-bold border transition-all"
-              style={{ borderColor: "hsl(var(--border))" }}>
+              style={{ borderColor: "hsl(var(--border))" }}
+            >
               Cancelar
             </button>
           </div>
@@ -429,8 +353,10 @@ export default function ImportarNFCe() {
       {/* ── STEP 3: SUCESSO ── */}
       {step === "success" && nfce && (
         <div className="produto-card flex flex-col items-center gap-4 py-10 text-center">
-          <div className="w-16 h-16 rounded-full flex items-center justify-center"
-            style={{ background: "rgba(1,117,122,0.12)" }}>
+          <div
+            className="w-16 h-16 rounded-full flex items-center justify-center"
+            style={{ background: "rgba(1,117,122,0.12)" }}
+          >
             <CheckCircle2 size={32} style={{ color: "#01757A" }} />
           </div>
           <div>
@@ -442,12 +368,14 @@ export default function ImportarNFCe() {
             </p>
           </div>
           <div className="flex gap-3">
-            <button className="btn-primary" onClick={() => window.location.href = "/"}>
+            <button className="btn-primary" onClick={() => navigate("/")}>
               Ver Insumos
             </button>
-            <button onClick={resetar}
+            <button
+              onClick={resetar}
               className="px-4 py-2 rounded-xl text-sm font-bold border transition-all"
-              style={{ borderColor: "hsl(var(--border))" }}>
+              style={{ borderColor: "hsl(var(--border))" }}
+            >
               Importar outra nota
             </button>
           </div>
