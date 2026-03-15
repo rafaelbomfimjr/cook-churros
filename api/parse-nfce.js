@@ -37,17 +37,23 @@ function parseNFCeText(text) {
   const emissaoM = text.match(/miss[aã]o[:\s]+([\d\/]+)/i);
   if (emissaoM) result.emissao = emissaoM[1];
 
-  // Funciona para texto inline (tudo numa linha) E multiline
-  const itemRe = /(.+?)\(C[oó]digo:\s*\d+\s*\)\s*Qtde\.:(\d+)UN:\s*([A-Z]+)Vl\.\s*Unit\.:\s*([\d\s,]+?)Vl\.\s*Total\s*([\d,]+)/gi;
+  // Normalizar: juntar "Vl. Total\n4,19" e colapsar quebras de linha
+  const normalized = text
+    .replace(/\r\n/g, '\n')
+    .replace(/Vl\.\s*Total\s*\n\s*([\d,]+)/g, 'Vl. Total $1')
+    .replace(/\n/g, ' ')
+    .replace(/\s+/g, ' ');
+
+  const itemRe = /(.+?)\(C[oó]digo:\s*\d+\s*\)\s*Qtde\.:\s*(\d+)\s*UN:\s*([A-Z]+)\s*Vl\.\s*Unit\.:\s*([\d,]+)\s*Vl\.\s*Total\s*([\d,]+)/gi;
   let m;
-  while ((m = itemRe.exec(text)) !== null) {
-    let nome = m[1].trim().replace(/[\d,]+\S*\s*$/, '').trim();
+  while ((m = itemRe.exec(normalized)) !== null) {
+    let nome = m[1].trim().replace(/[\d,]+\s*$/, '').trim();
     if (!nome) continue;
     result.itens.push({
       nome,
       quantidade: parseInt(m[2]),
       unidade: m[3].toUpperCase(),
-      vl_unit: parseFloat(m[4].replace(/\s/g, '').replace(',', '.')) || 0,
+      vl_unit: parseFloat(m[4].replace(',', '.')) || 0,
       vl_total: parseFloat(m[5].replace(',', '.')) || 0,
     });
   }
