@@ -9,6 +9,7 @@ import Index from "./pages/Index";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 import ImportarCardapio from "./pages/ImportarCardapio";
+import ImportarNFCe from "./pages/ImportarNFCe";
 
 const queryClient = new QueryClient();
 
@@ -66,6 +67,7 @@ const App = () => (
               </ProtectedRoute>
             }
           />
+          <Route path="/importar-nfce" element={<ProtectedRoute><ImportarNFCe /></ProtectedRoute>} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
