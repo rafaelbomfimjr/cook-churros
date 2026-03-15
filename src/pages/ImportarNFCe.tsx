@@ -43,43 +43,24 @@ function parseNFCeText(text: string): NFCeData {
     }
   }
 
-  // Chave
+  // Chave e Emissão
   const chaveM = text.match(/Chave de acesso:\s*([\d\s]{40,60})/);
   if (chaveM) result.chave = chaveM[1].replace(/\s/g, "").trim();
-
-  // Emissão
   const emissaoM = text.match(/miss[aã]o[:\s]+([\d\/]+)/i);
   if (emissaoM) result.emissao = emissaoM[1];
 
-  // ── Itens ──
-  // O texto colado pode vir de duas formas:
-  // Forma A (multiline): "NOME (Código: X )\nQtde.:N UN: XX Vl. Unit.: X,XX\nVl. Total X,XX"
-  // Forma B (inline):    "NOME (Código: X ) Qtde.:NUN: UNVl. Unit.:   X,XXVl. Total X,XX"
-
-  // Normalizar: juntar tudo em uma linha por item
-  const normalized = text
-    .replace(/\r\n/g, "\n")
-    .replace(/\r/g, "\n");
-
-  // Regex que funciona para ambas as formas
-  const itemRe = /(.+?)\s*\(C[oó]digo:\s*[\w\d]+\s*\).*?Qtde\.:(\d+)[\s\S]*?UN:\s*(\w+)[\s\S]*?Vl\.\s*Unit\.:\s*([\d,.\s]+?)Vl\.\s*Total\s*([\d,]+)/gi;
-
+  // Itens — funciona para texto inline (tudo colado numa linha) e multiline
+  const itemRe = /(.+?)\(C[oó]digo:\s*\d+\s*\)\s*Qtde\.:([\d]+)UN:\s*([A-Z]+)Vl\.\s*Unit\.:\s*([\d\s,]+?)Vl\.\s*Total\s*([\d,]+)/gi;
   let m: RegExpExecArray | null;
-  while ((m = itemRe.exec(normalized)) !== null) {
-    let nome = m[1].trim().split("\n").pop()?.trim() ?? m[1].trim();
-    // limpar prefixos de cabeçalho que possam ter vindo junto
-    nome = nome.replace(/^.*?(CNPJ|Consulta|http|NFC).*/i, "").trim();
+  while ((m = itemRe.exec(text)) !== null) {
+    let nome = m[1].trim().replace(/[\d,]+\S*\s*$/, "").trim();
     if (!nome) continue;
-
-    const vl_unit_str = m[4].replace(/\s/g, "").replace(".", "").replace(",", ".");
-    const vl_total_str = m[5].replace(",", ".");
-
     result.itens.push({
       nome,
       quantidade: parseInt(m[2]),
       unidade: m[3].toUpperCase(),
-      vl_unit: parseFloat(vl_unit_str) || 0,
-      vl_total: parseFloat(vl_total_str) || 0,
+      vl_unit: parseFloat(m[4].replace(/\s/g, "").replace(",", ".")) || 0,
+      vl_total: parseFloat(m[5].replace(",", ".")) || 0,
     });
   }
 
