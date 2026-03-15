@@ -6,66 +6,58 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método não permitido' });
 
   try {
-    const { base64 } = req.body;
-    if (!base64) return res.status(400).json({ error: 'PDF não enviado' });
-
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-opus-4-5',
-        max_tokens: 1000,
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: 'document',
-              source: { type: 'base64', media_type: 'application/pdf', data: base64 }
-            },
-            {
-              type: 'text',
-              text: `Extraia os dados desta NFC-e e retorne APENAS um JSON válido (sem markdown, sem texto extra) com este formato:
-{
-  "fornecedor": "nome da loja",
-  "cnpj": "XX.XXX.XXX/XXXX-XX",
-  "emissao": "DD/MM/AAAA",
-  "chave": "44 dígitos sem espaço",
-  "itens": [
-    {
-      "nome": "NOME DO PRODUTO",
-      "quantidade": 9,
-      "unidade": "PCE",
-      "vl_unit": 1.99,
-      "vl_total": 17.91
+    const { text } = req.body;
+    if (!text) return res.status(400).json({ error: 'Texto não enviado' });
+    const result = parseNFCeText(text);
+    if (!result.itens || result.itens.length === 0) {
+      return res.status(422).json({ error: 'Nenhum item encontrado. Copie o texto completo da nota.' });
     }
-  ],
-  "total": 55.87,
-  "desconto": 12.89,
-  "valor_pagar": 42.98
-}`
-            }
-          ]
-        }]
-      })
-    });
-
-    if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`Claude API erro ${response.status}: ${err}`);
-    }
-
-    const data = await response.json();
-    const raw = data.content?.[0]?.text ?? '';
-    const clean = raw.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(clean);
-
-    return res.status(200).json(parsed);
+    return res.status(200).json(result);
   } catch (err) {
     console.error('[api/parse-nfce]', err);
     return res.status(500).json({ error: String(err.message) });
   }
+}
+
+function parseNFCeText(text) {
+  const result = { fornecedor: '', cnpj: '', emissao: '', chave: '', itens: [], total: 0, desconto: 0, valor_pagar: 0 };
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].includes('CNPJ:')) {
+      const m = lines[i].match(/CNPJ:\s*([\d.\/-]+)/);
+      if (m) result.cnpj = m[1];
+      if (i > 0) result.fornecedor = lines[i - 1];
+      break;
+    }
+  }
+
+  const chaveM = text.match(/Chave de acesso:\s*([\d\s]{40,60})/);
+  if (chaveM) result.chave = chaveM[1].replace(/\s/g, '').trim();
+  const emissaoM = text.match(/miss[aã]o[:\s]+([\d\/]+)/i);
+  if (emissaoM) result.emissao = emissaoM[1];
+
+  // Funciona para texto inline (tudo numa linha) E multiline
+  const itemRe = /(.+?)\(C[oó]digo:\s*\d+\s*\)\s*Qtde\.:(\d+)UN:\s*([A-Z]+)Vl\.\s*Unit\.:\s*([\d\s,]+?)Vl\.\s*Total\s*([\d,]+)/gi;
+  let m;
+  while ((m = itemRe.exec(text)) !== null) {
+    let nome = m[1].trim().replace(/[\d,]+\S*\s*$/, '').trim();
+    if (!nome) continue;
+    result.itens.push({
+      nome,
+      quantidade: parseInt(m[2]),
+      unidade: m[3].toUpperCase(),
+      vl_unit: parseFloat(m[4].replace(/\s/g, '').replace(',', '.')) || 0,
+      vl_total: parseFloat(m[5].replace(',', '.')) || 0,
+    });
+  }
+
+  const totalM = text.match(/Valor total R\$[:\s]*([\d,]+)/);
+  if (totalM) result.total = parseFloat(totalM[1].replace(',', '.'));
+  const descM = text.match(/Descontos R\$[:\s]*([\d,]+)/);
+  if (descM) result.desconto = parseFloat(descM[1].replace(',', '.'));
+  const pagarM = text.match(/Valor a pagar R\$[:\s]*([\d,]+)/);
+  if (pagarM) result.valor_pagar = parseFloat(pagarM[1].replace(',', '.'));
+
+  return result;
 }
