@@ -46,23 +46,49 @@ function parseNFCeText(text: string): NFCeData {
   const emissaoM = text.match(/miss[aã]o[:\s]+([\d\/]+)/i);
   if (emissaoM) result.emissao = emissaoM[1];
 
+  // Normalizar quebras de linha
   const normalized = text
     .replace(/\r\n/g, "\n")
     .replace(/Vl\.\s*Total\s*\n\s*([\d,]+)/g, "Vl. Total $1")
     .replace(/\n/g, " ")
     .replace(/\s+/g, " ");
 
-  const itemRe = /(.+?)\(C[oó]digo:\s*\d+\s*\)\s*Qtde\.:\s*(\d+)\s*UN:\s*([A-Z]+)\s*Vl\.\s*Unit\.:\s*([\d,]+)\s*Vl\.\s*Total\s*([\d,]+)/gi;
-  let m: RegExpExecArray | null;
-  while ((m = itemRe.exec(normalized)) !== null) {
-    let nome = m[1].trim().replace(/[\d,]+\s*$/, "").trim();
-    if (!nome) continue;
+  // Localizar cada "(Código: NUMERO )" e extrair nome + dados do bloco seguinte
+  const codigoRe = /\(C[oó]digo:\s*(\d+)\s*\)/g;
+  const posicoes: { idx: number; end: number }[] = [];
+  let cm: RegExpExecArray | null;
+  while ((cm = codigoRe.exec(normalized)) !== null) {
+    posicoes.push({ idx: cm.index, end: cm.index + cm[0].length });
+  }
+
+  for (let i = 0; i < posicoes.length; i++) {
+    const pos = posicoes[i];
+    const prevEnd = i === 0 ? 0 : posicoes[i - 1].end;
+    let antes = normalized.slice(prevEnd, pos.idx);
+
+    // Remover "Vl. Total X,XX" do item anterior
+    antes = antes.replace(/.*Vl\.\s*Total\s*[\d,]+\s*/i, "");
+    // Remover cabeçalho (endereço termina com ", UF")
+    antes = antes.replace(/^.*,\s*[A-Z]{2}\s+/i, "");
+    // Remover números/símbolos soltos no início
+    antes = antes.replace(/^[\s\d,.\/*\-]+/, "").trim();
+
+    if (!antes || antes.length < 3) continue;
+
+    const bloco = normalized.slice(pos.end, posicoes[i + 1]?.idx ?? normalized.length);
+    const qtdeM = bloco.match(/Qtde\.:\s*([\d,]+)/);
+    const unM   = bloco.match(/UN:\s*([A-Z]{1,3})\s*(?:Vl\.|$)/);
+    const unitM = bloco.match(/Vl\.\s*Unit\.:\s*([\d,\s]+?)Vl\./);
+    const totalM = bloco.match(/Vl\.\s*Total\s*([\d,]+)/);
+
+    if (!qtdeM || !totalM) continue;
+
     result.itens.push({
-      nome,
-      quantidade: parseInt(m[2]),
-      unidade: m[3].toUpperCase(),
-      vl_unit: parseFloat(m[4].replace(",", ".")) || 0,
-      vl_total: parseFloat(m[5].replace(",", ".")) || 0,
+      nome: antes.trim(),
+      quantidade: parseFloat(qtdeM[1].replace(",", ".")),
+      unidade: unM?.[1] ?? "UN",
+      vl_unit: parseFloat((unitM?.[1] ?? "0").replace(/\s/g, "").replace(",", ".")) || 0,
+      vl_total: parseFloat(totalM[1].replace(",", ".")) || 0,
     });
   }
 
@@ -75,6 +101,7 @@ function parseNFCeText(text: string): NFCeData {
 
   return result;
 }
+
 
 type Step = "colar" | "preview" | "success";
 
