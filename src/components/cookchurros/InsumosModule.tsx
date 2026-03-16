@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Trash2, FileText, Pencil, X, Check, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp, Package } from "lucide-react";
+import { Plus, Trash2, FileText, Pencil, X, Check, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp, Package, Search } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Insumo, Medida, calcularCustoInsumo, calcularCustoProduto, formatBRL } from "@/lib/cookchurros";
 import { useInsumos, useProdutos } from "@/hooks/useCloudData";
@@ -294,6 +294,7 @@ function InsumoCard({ ins, index, total, onSave, onRemover }: {
 export default function InsumosModule() {
   const { insumos, loading, save } = useInsumos();
   const { produtos, loading: loadingProdutos } = useProdutos();
+  const [busca, setBusca] = useState("");
 
   const adicionar = () =>
     save([...insumos, { nome: "Novo Insumo", qtdeCompra: 0, medidaCompra: "g", precoCompra: 0, qtdeUtil: 0, medidaUtil: "g" }]);
@@ -352,17 +353,34 @@ export default function InsumosModule() {
         </div>
       )}
 
+      {/* Busca */}
+      <div className="relative mb-4">
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <input
+          value={busca}
+          onChange={e => setBusca(e.target.value)}
+          placeholder="Buscar insumo..."
+          className="inline-input w-full pl-9"
+        />
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-        {insumos.map((ins, i) => (
-          <InsumoCard
-            key={i}
-            ins={ins}
-            index={i}
-            total={insumos.length}
-            onSave={(novo) => salvarInsumo(i, novo)}
-            onRemover={() => remover(i)}
-          />
-        ))}
+        {[...insumos]
+          .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
+          .filter(ins => !busca || ins.nome.toLowerCase().includes(busca.toLowerCase()))
+          .map((ins) => {
+            const i = insumos.indexOf(ins);
+            return (
+              <InsumoCard
+                key={i}
+                ins={ins}
+                index={i}
+                total={insumos.length}
+                onSave={(novo) => salvarInsumo(i, novo)}
+                onRemover={() => remover(i)}
+              />
+            );
+          })}
       </div>
 
       {/* Insumos derivados de produtos do cardápio */}
@@ -379,7 +397,7 @@ export default function InsumosModule() {
             Produtos marcados como "vira insumo" — custo calculado automaticamente pela receita.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {insumosDerivados.map((ins, i) => (
+            {insumosDerivados.filter(ins => !busca || ins.nome.toLowerCase().includes(busca.toLowerCase())).map((ins, i) => (
               <div key={i} className="produto-card py-3 px-4"
                 style={{ borderLeft: "3px solid #01757A" }}>
                 <div className="flex items-start justify-between gap-2">
