@@ -8,9 +8,10 @@ export interface Gasto {
 }
 
 export interface DadosMes {
-  faturamento: number;         // total (legado + soma dos dois abaixo)
-  faturamentoLoja?: number;    // venda presencial / balcão
-  faturamentoIfood?: number;   // venda via iFood
+  faturamento: number;          // total (legado)
+  faturamentoLoja?: number;     // venda presencial / balcão
+  faturamentoIfood?: number;    // venda via iFood
+  faturamento99?: number;       // venda via 99Food
   gastos: Gasto[];
 }
 
