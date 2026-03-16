@@ -26,6 +26,8 @@ export interface Produto {
   nome: string;
   rendimento: number;
   receita: ItemReceita[];
+  virarInsumo?: boolean;   // quando true, este produto aparece como insumo
+  medidaInsumo?: Medida;   // medida da unidade produzida (default "un")
 }
 
 export interface HistoricoPreco {
