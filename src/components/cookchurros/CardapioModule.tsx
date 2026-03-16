@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
-import { Plus, Trash2, ChevronDown, ChevronUp, Package } from "lucide-react";
-import { Produto, Medida, calcularCustoProduto, formatBRL } from "@/lib/cookchurros";
+import { useState } from "react";
+import { Plus, Trash2, ChevronDown, ChevronUp, Package, Search } from "lucide-react";
+import { Produto, Insumo, Medida, calcularCustoProduto, formatBRL } from "@/lib/cookchurros";
 import { useInsumos, useProdutos } from "@/hooks/useCloudData";
 
 const medidas: Medida[] = ["g", "kg", "ml", "L", "un"];
@@ -9,8 +9,24 @@ export default function CardapioModule() {
   const { insumos, loading: loadingInsumos } = useInsumos();
   const { produtos, loading: loadingProdutos, save } = useProdutos();
   const [expanded, setExpanded] = useState<number | null>(null);
+  const [busca, setBusca] = useState("");
 
   const loading = loadingInsumos || loadingProdutos;
+
+  // Mesclar insumos manuais + derivados do cardápio, em ordem alfabética
+  const todosInsumos: Insumo[] = [
+    ...insumos,
+    ...(produtos ?? [])
+      .filter(p => p.virarInsumo)
+      .map(p => ({
+        nome: p.nome,
+        qtdeCompra: p.rendimento,
+        medidaCompra: (p.medidaInsumo ?? "un") as Medida,
+        precoCompra: calcularCustoProduto(p, insumos).custoUnitario * p.rendimento,
+        qtdeUtil: p.rendimento,
+        medidaUtil: (p.medidaInsumo ?? "un") as Medida,
+      })),
+  ].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 
   const adicionar = () => {
     const novo = [...produtos, { nome: "Novo Produto", rendimento: 1, receita: [] }];
@@ -21,19 +37,24 @@ export default function CardapioModule() {
   const remover = (i: number) => save(produtos.filter((_, idx) => idx !== i));
 
   const editar = (i: number, campo: keyof Produto, val: string) => {
-    save(produtos.map((p, idx) => idx === i ? { ...p, [campo]: campo === "rendimento" ? parseFloat(val) || 0 : val } : p));
+    save(produtos.map((p, idx) =>
+      idx === i ? { ...p, [campo]: campo === "rendimento" ? parseFloat(val) || 0 : val } : p
+    ));
   };
 
   const adicionarItem = (pi: number) => {
-    if (insumos.length === 0) { alert("Cadastre insumos primeiro."); return; }
-    const novos = produtos.map((p, idx) =>
-      idx === pi ? { ...p, receita: [...p.receita, { insumoNome: insumos[0].nome, quantidade: 0, medida: insumos[0].medidaUtil as Medida }] } : p
-    );
-    save(novos);
+    if (todosInsumos.length === 0) { alert("Cadastre insumos primeiro."); return; }
+    save(produtos.map((p, idx) =>
+      idx === pi
+        ? { ...p, receita: [...p.receita, { insumoNome: todosInsumos[0].nome, quantidade: 0, medida: todosInsumos[0].medidaUtil as Medida }] }
+        : p
+    ));
   };
 
   const removerItem = (pi: number, ri: number) => {
-    save(produtos.map((p, idx) => idx === pi ? { ...p, receita: p.receita.filter((_, i) => i !== ri) } : p));
+    save(produtos.map((p, idx) =>
+      idx === pi ? { ...p, receita: p.receita.filter((_, i) => i !== ri) } : p
+    ));
   };
 
   const editarItem = (pi: number, ri: number, campo: string, val: string) => {
@@ -54,6 +75,12 @@ export default function CardapioModule() {
     );
   }
 
+  // Produtos filtrados e ordenados
+  const produtosFiltrados = [...produtos]
+    .map((p, originalIndex) => ({ p, originalIndex }))
+    .sort((a, b) => a.p.nome.localeCompare(b.p.nome, "pt-BR"))
+    .filter(({ p }) => !busca || p.nome.toLowerCase().includes(busca.toLowerCase()));
+
   return (
     <div>
       <div className="section-header">
@@ -63,6 +90,17 @@ export default function CardapioModule() {
         </button>
       </div>
 
+      {/* Busca */}
+      <div className="relative mb-4">
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <input
+          value={busca}
+          onChange={e => setBusca(e.target.value)}
+          placeholder="Buscar produto..."
+          className="inline-input w-full pl-9"
+        />
+      </div>
+
       <div className="flex flex-col gap-4">
         {produtos.length === 0 && (
           <div className="text-center py-16 text-muted-foreground">
@@ -70,8 +108,9 @@ export default function CardapioModule() {
             <p className="text-sm mt-1">Clique em "Novo Produto" para começar</p>
           </div>
         )}
-        {produtos.map((produto, pi) => {
-          const { custoTotal, custoUnitario } = calcularCustoProduto(produto, insumos);
+
+        {produtosFiltrados.map(({ p: produto, originalIndex: pi }) => {
+          const { custoTotal, custoUnitario } = calcularCustoProduto(produto, todosInsumos);
           const isOpen = expanded === pi;
           return (
             <div key={pi} className="produto-card">
@@ -82,6 +121,11 @@ export default function CardapioModule() {
                   className="inline-input text-base font-bold flex-1"
                 />
                 <div className="flex items-center gap-2 shrink-0">
+                  {produto.virarInsumo && (
+                    <span title="Vira insumo">
+                      <Package size={14} style={{ color: "#01757A" }} />
+                    </span>
+                  )}
                   <span className="badge-orange">{formatBRL(custoUnitario)}/un</span>
                   <button className="btn-danger" onClick={() => remover(pi)}>
                     <Trash2 size={13} />
@@ -113,7 +157,9 @@ export default function CardapioModule() {
                     </div>
                     <div className="stat-card py-3">
                       <span className="stat-label">Custo/Unidade</span>
-                      <p className="font-extrabold text-base mt-1" style={{ color: "hsl(var(--primary))" }}>{formatBRL(custoUnitario)}</p>
+                      <p className="font-extrabold text-base mt-1" style={{ color: "hsl(var(--primary))" }}>
+                        {formatBRL(custoUnitario)}
+                      </p>
                     </div>
                     <div className="stat-card py-3">
                       <span className="stat-label">Insumos</span>
@@ -138,7 +184,7 @@ export default function CardapioModule() {
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {produto.virarInsumo
-                            ? `Aparece como insumo "${produto.nome}" com custo ${formatBRL(custoUnitario)}/${produto.medidaInsumo ?? "un"}`
+                            ? `Disponível como "${produto.nome}" a ${formatBRL(custoUnitario)}/${produto.medidaInsumo ?? "un"}`
                             : "Marque se este produto é usado como insumo em outras receitas"}
                         </p>
                       </div>
@@ -168,6 +214,7 @@ export default function CardapioModule() {
                     </div>
                   )}
 
+                  {/* Receita */}
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-bold">Receita</span>
@@ -183,7 +230,9 @@ export default function CardapioModule() {
                             onChange={e => editarItem(pi, ri, "insumoNome", e.target.value)}
                             className="inline-input flex-1 min-w-0"
                           >
-                            {insumos.map(ins => <option key={ins.nome} value={ins.nome}>{ins.nome}</option>)}
+                            {todosInsumos.map(ins => (
+                              <option key={ins.nome} value={ins.nome}>{ins.nome}</option>
+                            ))}
                           </select>
                           <input
                             type="number"
