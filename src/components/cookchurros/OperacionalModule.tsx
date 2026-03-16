@@ -14,8 +14,9 @@ export default function OperacionalModule() {
   // Faturamento total = soma das duas plataformas (ou valor legado se não usar os novos campos)
   const fatLoja = dadosMes.faturamentoLoja ?? 0;
   const fatIfood = dadosMes.faturamentoIfood ?? 0;
-  const faturamentoTotal = (fatLoja + fatIfood) > 0
-    ? fatLoja + fatIfood
+  const fat99 = dadosMes.faturamento99 ?? 0;
+  const faturamentoTotal = (fatLoja + fatIfood + fat99) > 0
+    ? fatLoja + fatIfood + fat99
     : dadosMes.faturamento; // compatibilidade com dados antigos
   const custoOperacional = faturamentoTotal > 0 ? (totalGastos / faturamentoTotal) * 100 : 0;
 
@@ -60,7 +61,8 @@ export default function OperacionalModule() {
       if (d) {
         const fatL = d.faturamentoLoja ?? 0;
         const fatI = d.faturamentoIfood ?? 0;
-        const fatTotal = (fatL + fatI) > 0 ? fatL + fatI : (d.faturamento || 0);
+        const fat9 = d.faturamento99 ?? 0;
+        const fatTotal = (fatL + fatI + fat9) > 0 ? fatL + fatI + fat9 : (d.faturamento || 0);
         faturamentos.push(fatTotal);
         const tg = d.gastos.reduce((a, g) => a + g.valor, 0);
         custosPercentuais.push(fatTotal > 0 ? parseFloat(((tg / fatTotal) * 100).toFixed(2)) : 0);
@@ -114,16 +116,16 @@ export default function OperacionalModule() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div className="stat-card">
-          <div className="flex items-center gap-2 mb-3">
+        {/* Faturamento — ponta a ponta */}
+        <div className="stat-card col-span-1 md:col-span-3">
+          <div className="flex items-center gap-2 mb-4">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "hsl(var(--primary)/0.12)" }}>
               <DollarSign size={16} style={{ color: "hsl(var(--primary))" }} />
             </div>
-            <span className="stat-label">Faturamento</span>
+            <span className="stat-label">Faturamento do Mês</span>
           </div>
-
-          <div className="flex flex-col gap-2">
-            <div className="flex flex-col gap-0.5">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
+            <div className="flex flex-col gap-1">
               <label className="text-xs text-muted-foreground font-semibold">Loja / Balcão</label>
               <input
                 type="number"
@@ -133,7 +135,7 @@ export default function OperacionalModule() {
                 className="inline-input w-full font-bold"
               />
             </div>
-            <div className="flex flex-col gap-0.5">
+            <div className="flex flex-col gap-1">
               <label className="text-xs text-muted-foreground font-semibold">iFood</label>
               <input
                 type="number"
@@ -143,11 +145,21 @@ export default function OperacionalModule() {
                 className="inline-input w-full font-bold"
               />
             </div>
-            <div className="flex items-center justify-between pt-1 border-t" style={{ borderColor: "hsl(var(--border))" }}>
-              <span className="text-xs font-bold text-muted-foreground">Total</span>
-              <span className="text-lg font-extrabold" style={{ color: "hsl(var(--primary))" }}>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-muted-foreground font-semibold">99Food</label>
+              <input
+                type="number"
+                value={dadosMes.faturamento99 || ""}
+                placeholder="0,00"
+                onChange={e => updateMes({ faturamento99: parseFloat(e.target.value) || 0 })}
+                className="inline-input w-full font-bold"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-bold" style={{ color: "hsl(var(--primary))" }}>Total</label>
+              <p className="text-2xl font-extrabold" style={{ color: "hsl(var(--primary))" }}>
                 {formatBRL(faturamentoTotal)}
-              </span>
+              </p>
             </div>
           </div>
         </div>
