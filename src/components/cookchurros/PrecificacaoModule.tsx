@@ -8,11 +8,23 @@ export default function PrecificacaoModule() {
   const { produtos, loading: loadingProdutos } = useProdutos();
   const { dados, loading: loadingOp } = useOperacional();
 
-  // Taxas editáveis
-  const [pctLucro,    setPctLucro]    = useState(60);
-  const [pctCartao,   setPctCartao]   = useState(3.2);
-  const [pctApp,      setPctApp]      = useState(24);
-  const [pctOpEdit,   setPctOpEdit]   = useState<number | null>(null); // null = usa o calculado
+  // Taxas editáveis — persistidas no localStorage
+  const [pctLucro,  setPctLucroRaw]  = useState(() => parseFloat(localStorage.getItem("pct_lucro")   ?? "60"));
+  const [pctCartao, setPctCartaoRaw] = useState(() => parseFloat(localStorage.getItem("pct_cartao")  ?? "3.2"));
+  const [pctApp,    setPctAppRaw]    = useState(() => parseFloat(localStorage.getItem("pct_app")     ?? "24"));
+  const [pctOpEdit, setPctOpEditRaw] = useState<number | null>(() => {
+    const v = localStorage.getItem("pct_op_edit");
+    return v !== null ? parseFloat(v) : null;
+  });
+
+  const setPctLucro  = (v: number) => { setPctLucroRaw(v);  localStorage.setItem("pct_lucro",   String(v)); };
+  const setPctCartao = (v: number) => { setPctCartaoRaw(v); localStorage.setItem("pct_cartao",  String(v)); };
+  const setPctApp    = (v: number) => { setPctAppRaw(v);    localStorage.setItem("pct_app",     String(v)); };
+  const setPctOpEdit = (v: number | null) => {
+    setPctOpEditRaw(v);
+    if (v === null) localStorage.removeItem("pct_op_edit");
+    else localStorage.setItem("pct_op_edit", String(v));
+  };
 
   const loading = loadingInsumos || loadingProdutos || loadingOp;
 
