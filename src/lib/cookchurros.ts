@@ -28,6 +28,11 @@ export interface Produto {
   receita: ItemReceita[];
 }
 
+export interface HistoricoPreco {
+  preco: number;
+  data: string; // ISO date string
+}
+
 export interface Insumo {
   nome: string;
   qtdeCompra: number;
@@ -35,6 +40,7 @@ export interface Insumo {
   precoCompra: number;
   qtdeUtil: number;
   medidaUtil: Medida;
+  historicoPrecos?: HistoricoPreco[]; // últimas 6 compras
 }
 
 export const mesAtualKey = () => new Date().toISOString().slice(0, 7);
