@@ -46,10 +46,16 @@ export default function PrecificacaoModule() {
   const pctOp = pctOpEdit !== null ? pctOpEdit : mediaCustoOp;
   const totalTaxa = pctLucro + pctCartao + pctApp + pctOp;
 
-  const calcPreco = (custoUnitario: number) =>
-    totalTaxa < 100 && custoUnitario > 0
-      ? custoUnitario / (1 - totalTaxa / 100)
-      : 0;
+  // Método 3 — Preço por Camadas:
+  // Passo 1: Ponto de equilíbrio (cobre custo + todas as taxas exceto lucro)
+  // Passo 2: Aplica o lucro sobre o ponto de equilíbrio
+  const taxasSemLucro = pctCartao + pctApp + pctOp;
+  const calcPreco = (custoUnitario: number) => {
+    if (custoUnitario <= 0) return 0;
+    if (taxasSemLucro >= 100) return 0;
+    const precoMinimo = custoUnitario / (1 - taxasSemLucro / 100); // ponto de equilíbrio
+    return precoMinimo * (1 + pctLucro / 100);                     // + lucro
+  };
 
   if (loading) {
     return (
@@ -186,7 +192,9 @@ export default function PrecificacaoModule() {
                 .map((p, i) => {
                   const { custoTotal, custoUnitario } = calcularCustoProduto(p, insumos);
                   const precoSugerido = calcPreco(custoUnitario);
-                  const lucroUn = precoSugerido - custoUnitario;
+                  // Lucro real = preço - custo - todas as taxas descontadas do preço
+                  const taxasDescontadas = precoSugerido * (taxasSemLucro / 100);
+                  const lucroUn = precoSugerido - custoUnitario - taxasDescontadas;
                   return (
                     <tr key={i}>
                       <td className="font-bold">{p.nome}</td>
