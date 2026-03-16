@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, Trash2, ChevronDown, ChevronUp, Package } from "lucide-react";
 import { Produto, Medida, calcularCustoProduto, formatBRL } from "@/lib/cookchurros";
 import { useInsumos, useProdutos } from "@/hooks/useCloudData";
 
@@ -120,6 +120,53 @@ export default function CardapioModule() {
                       <p className="font-extrabold text-base mt-1">{produto.receita.length}</p>
                     </div>
                   </div>
+
+                  {/* Toggle: vira insumo */}
+                  <div
+                    className="flex items-center justify-between px-4 py-3 rounded-xl cursor-pointer transition-all"
+                    style={{
+                      background: produto.virarInsumo ? "rgba(1,117,122,0.08)" : "hsl(var(--muted))",
+                      border: produto.virarInsumo ? "1px solid rgba(1,117,122,0.25)" : "1px solid transparent",
+                    }}
+                    onClick={() => save(produtos.map((p, idx) => idx === pi ? { ...p, virarInsumo: !p.virarInsumo } : p))}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Package size={15} style={{ color: produto.virarInsumo ? "#01757A" : "hsl(var(--muted-foreground))" }} />
+                      <div>
+                        <p className="text-sm font-bold" style={{ color: produto.virarInsumo ? "#01757A" : "hsl(var(--foreground))" }}>
+                          Este produto vira insumo
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {produto.virarInsumo
+                            ? `Aparece como insumo "${produto.nome}" com custo ${formatBRL(custoUnitario)}/${produto.medidaInsumo ?? "un"}`
+                            : "Marque se este produto é usado como insumo em outras receitas"}
+                        </p>
+                      </div>
+                    </div>
+                    <div
+                      className="w-10 h-6 rounded-full transition-all relative shrink-0"
+                      style={{ background: produto.virarInsumo ? "#01757A" : "hsl(var(--border))" }}
+                    >
+                      <div
+                        className="absolute top-1 w-4 h-4 rounded-full bg-white transition-all"
+                        style={{ left: produto.virarInsumo ? "22px" : "4px" }}
+                      />
+                    </div>
+                  </div>
+
+                  {produto.virarInsumo && (
+                    <div className="flex items-center gap-2 px-1">
+                      <span className="text-xs text-muted-foreground shrink-0">Medida da unidade produzida:</span>
+                      <select
+                        value={produto.medidaInsumo ?? "un"}
+                        onChange={e => save(produtos.map((p, idx) => idx === pi ? { ...p, medidaInsumo: e.target.value as Medida } : p))}
+                        className="inline-input text-xs"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        {medidas.map(m => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                    </div>
+                  )}
 
                   <div>
                     <div className="flex items-center justify-between mb-2">
