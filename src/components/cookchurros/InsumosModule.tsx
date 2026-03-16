@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Plus, Trash2, FileText, Pencil, X, Check, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, Trash2, FileText, Pencil, X, Check, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp, Package } from "lucide-react";
 import { Link } from "react-router-dom";
-import { Insumo, HistoricoPreco, Medida, calcularCustoInsumo, formatBRL } from "@/lib/cookchurros";
-import { useInsumos } from "@/hooks/useCloudData";
+import { Insumo, Medida, calcularCustoInsumo, calcularCustoProduto, formatBRL } from "@/lib/cookchurros";
+import { useInsumos, useProdutos } from "@/hooks/useCloudData";
+import { Package } from "lucide-react";
 
 const medidas: Medida[] = ["g", "kg", "ml", "L", "un"];
 
@@ -292,6 +293,7 @@ function InsumoCard({ ins, index, total, onSave, onRemover }: {
 
 export default function InsumosModule() {
   const { insumos, loading, save } = useInsumos();
+  const { produtos, loading: loadingProdutos } = useProdutos();
 
   const adicionar = () =>
     save([...insumos, { nome: "Novo Insumo", qtdeCompra: 0, medidaCompra: "g", precoCompra: 0, qtdeUtil: 0, medidaUtil: "g" }]);
@@ -301,7 +303,23 @@ export default function InsumosModule() {
   const salvarInsumo = (i: number, novo: Insumo) =>
     save(insumos.map((ins, idx) => idx === i ? novo : ins));
 
-  if (loading) {
+  // Produtos marcados como "vira insumo" — calculados dinamicamente
+  const insumosDerivados = (produtos ?? [])
+    .filter(p => p.virarInsumo)
+    .map(p => {
+      const { custoUnitario } = calcularCustoProduto(p, insumos);
+      return {
+        nome: p.nome,
+        qtdeCompra: p.rendimento,
+        medidaCompra: (p.medidaInsumo ?? "un") as Medida,
+        precoCompra: custoUnitario * p.rendimento,
+        qtdeUtil: p.rendimento,
+        medidaUtil: (p.medidaInsumo ?? "un") as Medida,
+        _derivado: true,
+      } as Insumo & { _derivado: boolean };
+    });
+
+  if (loading || loadingProdutos) {
     return (
       <div className="flex items-center justify-center py-24 text-muted-foreground">
         <span className="animate-pulse font-semibold">Carregando insumos...</span>
@@ -346,6 +364,47 @@ export default function InsumosModule() {
           />
         ))}
       </div>
+
+      {/* Insumos derivados de produtos do cardápio */}
+      {insumosDerivados.length > 0 && (
+        <div className="mt-8">
+          <div className="flex items-center gap-2 mb-3">
+            <Package size={16} style={{ color: "#01757A" }} />
+            <h2 className="font-bold text-base" style={{ color: "#01757A" }}>
+              Derivados do Cardápio
+            </h2>
+            <span className="badge-teal">{insumosDerivados.length}</span>
+          </div>
+          <p className="text-xs text-muted-foreground mb-3">
+            Produtos marcados como "vira insumo" — custo calculado automaticamente pela receita.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {insumosDerivados.map((ins, i) => (
+              <div key={i} className="produto-card py-3 px-4"
+                style={{ borderLeft: "3px solid #01757A" }}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <Package size={12} style={{ color: "#01757A" }} />
+                      <p className="font-bold text-sm truncate">{ins.nome}</p>
+                    </div>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <span className="text-xs text-muted-foreground">
+                        Rende: <strong>{ins.qtdeCompra} {ins.medidaCompra}</strong>
+                      </span>
+                      <span className="text-xs px-2 py-0.5 rounded-full font-bold"
+                        style={{ background: "rgba(1,117,122,0.1)", color: "#01757A" }}>
+                        {formatBRL(calcularCustoInsumo(ins).precoReal)}/{ins.medidaUtil}
+                      </span>
+                    </div>
+                  </div>
+                  <span className="text-xs text-muted-foreground shrink-0">Auto</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
