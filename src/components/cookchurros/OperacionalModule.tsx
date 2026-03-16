@@ -10,7 +10,14 @@ export default function OperacionalModule() {
   const chartInstance = useRef<any>(null);
 
   const totalGastos = dadosMes.gastos.reduce((acc, g) => acc + g.valor, 0);
-  const custoOperacional = dadosMes.faturamento > 0 ? (totalGastos / dadosMes.faturamento) * 100 : 0;
+
+  // Faturamento total = soma das duas plataformas (ou valor legado se não usar os novos campos)
+  const fatLoja = dadosMes.faturamentoLoja ?? 0;
+  const fatIfood = dadosMes.faturamentoIfood ?? 0;
+  const faturamentoTotal = (fatLoja + fatIfood) > 0
+    ? fatLoja + fatIfood
+    : dadosMes.faturamento; // compatibilidade com dados antigos
+  const custoOperacional = faturamentoTotal > 0 ? (totalGastos / faturamentoTotal) * 100 : 0;
 
   const adicionarGasto = () => {
     updateMes({ gastos: [...dadosMes.gastos, { nome: "Novo Gasto", valor: 0 }] });
@@ -51,9 +58,12 @@ export default function OperacionalModule() {
       meses.push(String(i).padStart(2, "0"));
       const d = dados[mesFormatado];
       if (d) {
-        faturamentos.push(d.faturamento || 0);
+        const fatL = d.faturamentoLoja ?? 0;
+        const fatI = d.faturamentoIfood ?? 0;
+        const fatTotal = (fatL + fatI) > 0 ? fatL + fatI : (d.faturamento || 0);
+        faturamentos.push(fatTotal);
         const tg = d.gastos.reduce((a, g) => a + g.valor, 0);
-        custosPercentuais.push(d.faturamento > 0 ? parseFloat(((tg / d.faturamento) * 100).toFixed(2)) : 0);
+        custosPercentuais.push(fatTotal > 0 ? parseFloat(((tg / fatTotal) * 100).toFixed(2)) : 0);
       } else {
         faturamentos.push(0);
         custosPercentuais.push(0);
@@ -105,19 +115,41 @@ export default function OperacionalModule() {
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="stat-card">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 mb-3">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "hsl(var(--primary)/0.12)" }}>
               <DollarSign size={16} style={{ color: "hsl(var(--primary))" }} />
             </div>
             <span className="stat-label">Faturamento</span>
           </div>
-          <input
-            type="number"
-            value={dadosMes.faturamento || ""}
-            placeholder="0,00"
-            onChange={e => updateMes({ faturamento: parseFloat(e.target.value) || 0 })}
-            className="inline-input text-xl font-extrabold w-full mt-1"
-          />
+
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-0.5">
+              <label className="text-xs text-muted-foreground font-semibold">Loja / Balcão</label>
+              <input
+                type="number"
+                value={dadosMes.faturamentoLoja || ""}
+                placeholder="0,00"
+                onChange={e => updateMes({ faturamentoLoja: parseFloat(e.target.value) || 0 })}
+                className="inline-input w-full font-bold"
+              />
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <label className="text-xs text-muted-foreground font-semibold">iFood</label>
+              <input
+                type="number"
+                value={dadosMes.faturamentoIfood || ""}
+                placeholder="0,00"
+                onChange={e => updateMes({ faturamentoIfood: parseFloat(e.target.value) || 0 })}
+                className="inline-input w-full font-bold"
+              />
+            </div>
+            <div className="flex items-center justify-between pt-1 border-t" style={{ borderColor: "hsl(var(--border))" }}>
+              <span className="text-xs font-bold text-muted-foreground">Total</span>
+              <span className="text-lg font-extrabold" style={{ color: "hsl(var(--primary))" }}>
+                {formatBRL(faturamentoTotal)}
+              </span>
+            </div>
+          </div>
         </div>
         <div className="stat-card">
           <div className="flex items-center gap-2">
