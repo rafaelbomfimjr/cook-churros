@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import {
   Insumo,
   Produto,
+  Combo,
   DadosOperacional,
   getDefaultDadosMes,
   mesAtualKey,
@@ -158,4 +159,23 @@ export function useOperacional() {
   );
 
   return { dados, dadosMes, mesAtual, loading, save, updateMes, trocarMes };
+}
+
+export function useCombos() {
+  const [combos, setCombos] = useState<Combo[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    apiGet<Combo[]>("/api/combos").then((data) => {
+      setCombos(data ?? []);
+      setLoading(false);
+    });
+  }, []);
+
+  const save = useCallback(async (novos: Combo[]) => {
+    setCombos(novos);
+    await apiPost("/api/combos", novos);
+  }, []);
+
+  return { combos, loading, save };
 }
