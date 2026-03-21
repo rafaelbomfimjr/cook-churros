@@ -104,6 +104,24 @@ export function calcularCustoProduto(produto: Produto, insumos: Insumo[]): { cus
   };
 }
 
+// ── Combos ──────────────────────────────────────────────
+export type ComboItemTipo = "unidade" | "porcao";
+
+export interface ComboItem {
+  produtoNome: string;
+  tipo: ComboItemTipo;
+  quantidade: number;        // unidades (tipo="unidade") ou índice de porção (tipo="porcao")
+  porcaoIndex?: number;      // qual porção do produto (0, 1, 2...) quando tipo="porcao"
+}
+
+export interface Combo {
+  id: string;
+  nome: string;
+  descricao?: string;
+  itens: ComboItem[];
+  precoVenda?: number;       // preço definido manualmente (opcional)
+}
+
 export function formatBRL(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
