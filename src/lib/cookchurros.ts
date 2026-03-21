@@ -25,12 +25,19 @@ export interface ItemReceita {
   medida: Medida;
 }
 
+export interface PorcaoItem {
+  quantidade: number;       // ex: 4, 6, 9
+  embalagemNome: string;    // nome do insumo de embalagem
+}
+
 export interface Produto {
   nome: string;
   rendimento: number;
   receita: ItemReceita[];
-  virarInsumo?: boolean;   // quando true, este produto aparece como insumo
-  medidaInsumo?: Medida;   // medida da unidade produzida (default "un")
+  virarInsumo?: boolean;
+  medidaInsumo?: Medida;
+  vendidoPorPorcao?: boolean;     // ativa modo porção na precificação
+  porcoes?: PorcaoItem[];         // lista de porções disponíveis
 }
 
 export interface HistoricoPreco {
