@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Plus, Trash2, FileText, Pencil, X, Check, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp, Package, Search } from "lucide-react";
 import { Link } from "react-router-dom";
-import { Insumo, Medida, calcularCustoInsumo, calcularCustoProduto, formatBRL } from "@/lib/cookchurros";
+import { Insumo, Medida, CategoriaInsumo, CATEGORIAS_INSUMO, calcularCustoInsumo, calcularCustoProduto, formatBRL } from "@/lib/cookchurros";
 import { useInsumos, useProdutos } from "@/hooks/useCloudData";
 import { Package } from "lucide-react";
 
@@ -113,6 +113,14 @@ function InsumoCard({ ins, index, total, onSave, onRemover }: {
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0">
               <p className="font-bold text-sm truncate">{ins.nome}</p>
+              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                {ins.categoria && (
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                    style={{ background: "rgba(138,56,28,0.08)", color: "#8A381C" }}>
+                    {ins.categoria}
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-3 mt-1 flex-wrap">
                 <span className="text-xs text-muted-foreground">
                   Compra: <strong>{formatBRL(ins.precoCompra)}</strong>
@@ -194,6 +202,19 @@ function InsumoCard({ ins, index, total, onSave, onRemover }: {
               onChange={e => setField("nome", e.target.value)}
               className="inline-input w-full"
             />
+          </div>
+
+          {/* Categoria */}
+          <div className="flex flex-col gap-1">
+            <label className="stat-label">Categoria</label>
+            <select
+              value={draft.categoria ?? ""}
+              onChange={e => setDraft(prev => ({ ...prev, categoria: e.target.value as CategoriaInsumo || undefined }))}
+              className="inline-input w-full"
+            >
+              <option value="">— Sem categoria —</option>
+              {CATEGORIAS_INSUMO.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
           </div>
 
           {/* Compra */}
@@ -295,6 +316,7 @@ export default function InsumosModule() {
   const { insumos, loading, save } = useInsumos();
   const { produtos, loading: loadingProdutos } = useProdutos();
   const [busca, setBusca] = useState("");
+  const [categoriaFiltro, setCategoriaFiltro] = useState<CategoriaInsumo | "Todos">("Todos");
 
   const adicionar = () =>
     save([...insumos, { nome: "Novo Insumo", qtdeCompra: 0, medidaCompra: "g", precoCompra: 0, qtdeUtil: 0, medidaUtil: "g" }]);
@@ -353,21 +375,44 @@ export default function InsumosModule() {
         </div>
       )}
 
-      {/* Busca */}
-      <div className="relative mb-4">
-        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-        <input
-          value={busca}
-          onChange={e => setBusca(e.target.value)}
-          placeholder="Buscar insumo..."
-          className="inline-input w-full pl-9"
-        />
+      {/* Busca + Filtro de categoria */}
+      <div className="flex gap-2 mb-4 flex-wrap">
+        <div className="relative flex-1 min-w-48">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={busca}
+            onChange={e => setBusca(e.target.value)}
+            placeholder="Buscar insumo..."
+            className="inline-input w-full pl-9"
+          />
+        </div>
+        <div className="flex gap-1.5 flex-wrap">
+          {(["Todos", ...CATEGORIAS_INSUMO] as const).map(cat => (
+            <button
+              key={cat}
+              onClick={() => setCategoriaFiltro(cat as CategoriaInsumo | "Todos")}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold transition-all"
+              style={{
+                background: categoriaFiltro === cat ? "#01757A" : "hsl(var(--muted))",
+                color: categoriaFiltro === cat ? "#fff" : "hsl(var(--muted-foreground))",
+              }}
+            >
+              {cat}
+              {cat !== "Todos" && (
+                <span className="ml-1 opacity-70">
+                  ({insumos.filter(i => i.categoria === cat).length})
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
         {[...insumos]
           .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
           .filter(ins => !busca || ins.nome.toLowerCase().includes(busca.toLowerCase()))
+          .filter(ins => categoriaFiltro === "Todos" || ins.categoria === categoriaFiltro)
           .map((ins) => {
             const i = insumos.indexOf(ins);
             return (
@@ -397,7 +442,10 @@ export default function InsumosModule() {
             Produtos marcados como "vira insumo" — custo calculado automaticamente pela receita.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {insumosDerivados.filter(ins => !busca || ins.nome.toLowerCase().includes(busca.toLowerCase())).map((ins, i) => (
+            {insumosDerivados
+              .filter(ins => !busca || ins.nome.toLowerCase().includes(busca.toLowerCase()))
+              .filter(() => categoriaFiltro === "Todos")
+              .map((ins, i) => (
               <div key={i} className="produto-card py-3 px-4"
                 style={{ borderLeft: "3px solid #01757A" }}>
                 <div className="flex items-start justify-between gap-2">
