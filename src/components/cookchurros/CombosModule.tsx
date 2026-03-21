@@ -442,7 +442,7 @@ export default function CombosModule() {
     ? combosComPreco.reduce((acc, c) => {
         const custo = custoTotalCombo(c, produtos, insumos);
         const preco = c.precoVenda!;
-        const lucro = calcLucroLiquido(preco, custo);
+        const lucro = calcLucroReal(preco, custo);
         return acc + (lucro / preco) * 100;
       }, 0) / combosComPreco.length
     : 0;
