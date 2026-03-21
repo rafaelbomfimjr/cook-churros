@@ -324,10 +324,21 @@ export default function PrecificacaoModule() {
                                       const custoEmb1 = custoUnitarioInsumo(emb.insumoNome, insumos) * emb.quantidade;
                                       return (
                                         <div key={ei} className="flex items-center gap-2">
+                                          {/* Qtde — pequeno e fixo */}
+                                          <input
+                                            type="number" min={1}
+                                            value={emb.quantidade}
+                                            onChange={e => editEmbalagem(pi, ri, ei, "quantidade", e.target.value)}
+                                            className="inline-input text-sm text-center font-bold shrink-0"
+                                            style={{ width: "52px" }}
+                                          />
+                                          <span className="text-xs text-muted-foreground shrink-0">×</span>
+                                          {/* Select — ocupa o espaço restante */}
                                           <select
                                             value={emb.insumoNome}
                                             onChange={e => editEmbalagem(pi, ri, ei, "insumoNome", e.target.value)}
-                                            className="inline-input flex-1 text-sm"
+                                            className="inline-input text-sm min-w-0"
+                                            style={{ flex: "1 1 0" }}
                                           >
                                             <option value="">— Selecione um insumo —</option>
                                             {insumosFiltrados.map(ins => (
@@ -336,19 +347,11 @@ export default function PrecificacaoModule() {
                                               </option>
                                             ))}
                                           </select>
-                                          <span className="text-xs text-muted-foreground shrink-0">×</span>
-                                          <input
-                                            type="number" min={1}
-                                            value={emb.quantidade}
-                                            onChange={e => editEmbalagem(pi, ri, ei, "quantidade", e.target.value)}
-                                            className="inline-input w-14 text-sm text-center"
-                                          />
-                                          {emb.insumoNome && (
-                                            <span className="text-xs font-bold shrink-0 px-2 py-1 rounded-lg"
-                                              style={{ background: "rgba(138,56,28,0.08)", color: "#8A381C", minWidth: "60px", textAlign: "right" }}>
-                                              {formatBRL(custoEmb1)}
-                                            </span>
-                                          )}
+                                          {/* Custo da linha */}
+                                          <span className="text-xs font-bold shrink-0 px-2 py-1 rounded-lg"
+                                            style={{ background: "rgba(138,56,28,0.08)", color: "#8A381C", width: "64px", textAlign: "right" }}>
+                                            {emb.insumoNome ? formatBRL(custoEmb1) : "—"}
+                                          </span>
                                           <button onClick={() => removeEmbalagem(pi, ri, ei)} className="btn-danger p-1 shrink-0">
                                             <Trash2 size={11} />
                                           </button>
