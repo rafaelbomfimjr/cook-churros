@@ -1,17 +1,24 @@
 import { useState, useMemo } from "react";
 import { calcularCustoProduto, converterParaBase, formatBRL, Insumo, PorcaoItem } from "@/lib/cookchurros";
 import { useInsumos, useProdutos, useOperacional } from "@/hooks/useCloudData";
-import { Info, Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import { Info, Plus, Trash2, ChevronDown, ChevronUp, Package } from "lucide-react";
 
-// Calcula custo de uma embalagem específica
-function custoDaEmbalagem(nome: string, insumos: Insumo[]): number {
+// Custo unitário de um insumo (já considerando desperdício)
+function custoUnitarioInsumo(nome: string, insumos: Insumo[]): number {
   const ins = insumos.find(i => i.nome === nome);
   if (!ins) return 0;
   const compraBase = converterParaBase(ins.qtdeCompra, ins.medidaCompra);
   const utilBase   = converterParaBase(ins.qtdeUtil, ins.medidaUtil);
   if (compraBase <= 0 || utilBase <= 0) return 0;
   const aproveitamento = utilBase / compraBase;
-  return ins.precoCompra / aproveitamento / utilBase; // custo por unidade útil
+  return (ins.precoCompra / aproveitamento) / utilBase;
+}
+
+// Custo total das embalagens de uma porção
+function custoPorcaoEmbalagens(porcao: PorcaoItem, insumos: Insumo[]): number {
+  return (porcao.embalagens ?? []).reduce((acc, emb) => {
+    return acc + custoUnitarioInsumo(emb.insumoNome, insumos) * emb.quantidade;
+  }, 0);
 }
 
 export default function PrecificacaoModule() {
@@ -39,14 +46,11 @@ export default function PrecificacaoModule() {
 
   const [expandidos, setExpandidos] = useState<Set<number>>(new Set());
   const toggleExpandido = (i: number) => setExpandidos(prev => {
-    const s = new Set(prev);
-    s.has(i) ? s.delete(i) : s.add(i);
-    return s;
+    const s = new Set(prev); s.has(i) ? s.delete(i) : s.add(i); return s;
   });
 
   const loading = loadingInsumos || loadingProdutos || loadingOp;
 
-  // Média custo operacional últimos 3 meses
   const mediaCustoOp = useMemo(() => {
     if (!dados) return 0;
     const hoje = new Date();
@@ -71,52 +75,55 @@ export default function PrecificacaoModule() {
   const taxasSemLucro = pctCartao + pctApp + pctOp;
   const totalTaxa = pctLucro + taxasSemLucro;
 
-  const calcPreco = (custoUnitario: number) => {
-    if (custoUnitario <= 0 || taxasSemLucro >= 100) return 0;
-    const precoMinimo = custoUnitario / (1 - taxasSemLucro / 100);
-    return precoMinimo * (1 + pctLucro / 100);
+  const calcPreco = (custo: number) => {
+    if (custo <= 0 || taxasSemLucro >= 100) return 0;
+    return (custo / (1 - taxasSemLucro / 100)) * (1 + pctLucro / 100);
   };
+  const calcLucro = (preco: number, custo: number) =>
+    preco - custo - preco * (taxasSemLucro / 100);
 
-  const calcLucro = (preco: number, custo: number) => {
-    const taxasDesc = preco * (taxasSemLucro / 100);
-    return preco - custo - taxasDesc;
-  };
+  // Helpers para editar porções
+  const togglePorcao = (pi: number, ativo: boolean) =>
+    save(produtos.map((p, i) => i === pi ? {
+      ...p, vendidoPorPorcao: ativo,
+      porcoes: ativo ? (p.porcoes?.length ? p.porcoes : [{ quantidade: 4, embalagens: [] }]) : []
+    } : p));
 
-  // Salvar configuração de porção de um produto
-  const togglePorcao = (pi: number, ativo: boolean) => {
+  const addPorcao = (pi: number) =>
     save(produtos.map((p, i) => i === pi
-      ? { ...p, vendidoPorPorcao: ativo, porcoes: ativo ? (p.porcoes ?? [{ quantidade: 4, embalagemNome: "" }]) : [] }
-      : p
-    ));
-  };
+      ? { ...p, porcoes: [...(p.porcoes ?? []), { quantidade: 1, embalagens: [] }] } : p));
 
-  const addPorcao = (pi: number) => {
+  const removePorcao = (pi: number, ri: number) =>
     save(produtos.map((p, i) => i === pi
-      ? { ...p, porcoes: [...(p.porcoes ?? []), { quantidade: 1, embalagemNome: "" }] }
-      : p
-    ));
-  };
+      ? { ...p, porcoes: (p.porcoes ?? []).filter((_, j) => j !== ri) } : p));
 
-  const removePorcao = (pi: number, ri: number) => {
-    save(produtos.map((p, i) => i === pi
-      ? { ...p, porcoes: (p.porcoes ?? []).filter((_, j) => j !== ri) }
-      : p
-    ));
-  };
+  const editQtdePorcao = (pi: number, ri: number, val: string) =>
+    save(produtos.map((p, i) => i === pi ? {
+      ...p, porcoes: (p.porcoes ?? []).map((po, j) =>
+        j === ri ? { ...po, quantidade: parseInt(val) || 1 } : po)
+    } : p));
 
-  const editPorcao = (pi: number, ri: number, campo: keyof PorcaoItem, val: string) => {
-    save(produtos.map((p, i) => i === pi
-      ? {
-          ...p,
-          porcoes: (p.porcoes ?? []).map((po, j) =>
-            j === ri ? { ...po, [campo]: campo === "quantidade" ? parseInt(val) || 1 : val } : po
-          )
-        }
-      : p
-    ));
-  };
+  const addEmbalagem = (pi: number, ri: number) =>
+    save(produtos.map((p, i) => i === pi ? {
+      ...p, porcoes: (p.porcoes ?? []).map((po, j) =>
+        j === ri ? { ...po, embalagens: [...(po.embalagens ?? []), { insumoNome: "", quantidade: 1 }] } : po)
+    } : p));
 
-  // Insumos que parecem embalagem (filtro assistido)
+  const removeEmbalagem = (pi: number, ri: number, ei: number) =>
+    save(produtos.map((p, i) => i === pi ? {
+      ...p, porcoes: (p.porcoes ?? []).map((po, j) =>
+        j === ri ? { ...po, embalagens: (po.embalagens ?? []).filter((_, k) => k !== ei) } : po)
+    } : p));
+
+  const editEmbalagem = (pi: number, ri: number, ei: number, campo: "insumoNome" | "quantidade", val: string) =>
+    save(produtos.map((p, i) => i === pi ? {
+      ...p, porcoes: (p.porcoes ?? []).map((po, j) =>
+        j === ri ? {
+          ...po, embalagens: (po.embalagens ?? []).map((emb, k) =>
+            k === ei ? { ...emb, [campo]: campo === "quantidade" ? parseInt(val) || 1 : val } : emb)
+        } : po)
+    } : p));
+
   const insumosFiltrados = [...insumos].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 
   if (loading) {
@@ -137,7 +144,7 @@ export default function PrecificacaoModule() {
         <h1 className="page-title mb-0">Precificação</h1>
       </div>
 
-      {/* Cards de taxas */}
+      {/* Taxas */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
         <div className="stat-card">
           <span className="stat-label">% Lucro</span>
@@ -192,7 +199,6 @@ export default function PrecificacaoModule() {
       {produtos.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">
           <p className="font-semibold">Nenhum produto no cardápio</p>
-          <p className="text-sm mt-1">Adicione produtos no módulo Cardápio primeiro</p>
         </div>
       ) : (
         <div className="overflow-x-auto">
@@ -211,21 +217,19 @@ export default function PrecificacaoModule() {
             <tbody>
               {produtosOrdenados.map(({ p: produto, originalIndex: pi }) => {
                 const { custoTotal, custoUnitario } = calcularCustoProduto(produto, insumos);
-                const isPorcao = produto.vendidoPorPorcao ?? false;
+                const isPorcao  = produto.vendidoPorPorcao ?? false;
                 const isExpanded = expandidos.has(pi);
-                const precoUn = calcPreco(custoUnitario);
-                const lucroUn = calcLucro(precoUn, custoUnitario);
+                const precoUn   = calcPreco(custoUnitario);
+                const lucroUn   = calcLucro(precoUn, custoUnitario);
 
                 return (
                   <>
                     {/* Linha principal */}
-                    <tr key={`row-${pi}`} style={{ background: isExpanded ? "rgba(1,117,122,0.03)" : undefined }}>
+                    <tr key={`r-${pi}`} style={{ background: isExpanded ? "rgba(1,117,122,0.03)" : undefined }}>
                       <td className="font-bold">{produto.nome}</td>
-
-                      {/* Toggle porção */}
                       <td className="text-center">
                         <button
-                          onClick={() => togglePorcao(pi, !isPorcao)}
+                          onClick={() => { togglePorcao(pi, !isPorcao); if (!isPorcao) setExpandidos(prev => { const s = new Set(prev); s.add(pi); return s; }); }}
                           className="flex items-center gap-1.5 mx-auto px-2.5 py-1 rounded-lg text-xs font-bold transition-all"
                           style={{
                             background: isPorcao ? "rgba(1,117,122,0.1)" : "hsl(var(--muted))",
@@ -240,11 +244,8 @@ export default function PrecificacaoModule() {
                           Porção
                         </button>
                       </td>
-
                       <td>{formatBRL(custoTotal)}</td>
                       <td className="font-bold">{formatBRL(custoUnitario)}</td>
-
-                      {/* Preço e lucro: só mostra se não for porção */}
                       {!isPorcao ? (
                         <>
                           <td className="font-extrabold" style={{ color: "#01757A" }}>{formatBRL(precoUn)}</td>
@@ -252,97 +253,124 @@ export default function PrecificacaoModule() {
                         </>
                       ) : (
                         <>
-                          <td className="text-muted-foreground text-xs">ver porções</td>
+                          <td className="text-xs text-muted-foreground">{(produto.porcoes ?? []).length} porção(ões)</td>
                           <td></td>
                         </>
                       )}
-
                       <td>
                         {isPorcao && (
-                          <button
-                            onClick={() => toggleExpandido(pi)}
-                            className="p-1 rounded-lg text-muted-foreground hover:text-foreground transition-all"
-                          >
+                          <button onClick={() => toggleExpandido(pi)} className="p-1 rounded-lg text-muted-foreground hover:text-foreground">
                             {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
                           </button>
                         )}
                       </td>
                     </tr>
 
-                    {/* Linhas de porções expandidas */}
+                    {/* Porções expandidas */}
                     {isPorcao && isExpanded && (
                       <tr key={`porcoes-${pi}`}>
-                        <td colSpan={7} style={{ padding: "0 0 8px 0", background: "rgba(1,117,122,0.03)" }}>
-                          <div className="px-4 pb-3 pt-1 flex flex-col gap-2">
-
-                            {/* Cabeçalho das porções */}
-                            <div className="grid gap-2 text-xs font-bold text-muted-foreground uppercase tracking-wider px-1"
-                              style={{ gridTemplateColumns: "80px 1fr 120px 120px 100px" }}>
-                              <span>Qtde</span>
-                              <span>Embalagem</span>
-                              <span>Custo Porção</span>
-                              <span>Preço Sugerido</span>
-                              <span>Lucro</span>
-                            </div>
-
+                        <td colSpan={7} style={{ padding: 0, background: "rgba(1,117,122,0.02)" }}>
+                          <div className="px-4 py-3 flex flex-col gap-4">
                             {(produto.porcoes ?? []).map((po, ri) => {
-                              const custoEmb = custoDaEmbalagem(po.embalagemNome, insumos);
+                              const custoEmb    = custoPorcaoEmbalagens(po, insumos);
                               const custoPorcao = custoUnitario * po.quantidade + custoEmb;
                               const precoPorcao = calcPreco(custoPorcao);
                               const lucroPorcao = calcLucro(precoPorcao, custoPorcao);
 
                               return (
-                                <div key={ri} className="grid gap-2 items-center"
-                                  style={{ gridTemplateColumns: "80px 1fr 120px 120px 100px auto" }}>
+                                <div key={ri} className="rounded-xl border p-3 flex flex-col gap-3"
+                                  style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
 
-                                  {/* Quantidade da porção */}
-                                  <div className="flex items-center gap-1">
-                                    <input
-                                      type="number"
-                                      min={1}
-                                      value={po.quantidade}
-                                      onChange={e => editPorcao(pi, ri, "quantidade", e.target.value)}
-                                      className="inline-input w-full text-sm font-bold text-center"
-                                    />
+                                  {/* Cabeçalho da porção */}
+                                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs font-bold text-muted-foreground shrink-0">Porção de</span>
+                                      <input
+                                        type="number" min={1}
+                                        value={po.quantidade}
+                                        onChange={e => editQtdePorcao(pi, ri, e.target.value)}
+                                        className="inline-input w-16 text-sm font-bold text-center"
+                                      />
+                                      <span className="text-xs text-muted-foreground shrink-0">unidades</span>
+                                    </div>
+
+                                    <div className="flex items-center gap-4">
+                                      <div className="text-right">
+                                        <p className="text-xs text-muted-foreground">Custo total</p>
+                                        <p className="font-bold text-sm">{formatBRL(custoPorcao)}</p>
+                                      </div>
+                                      <div className="text-right">
+                                        <p className="text-xs text-muted-foreground">Preço sugerido</p>
+                                        <p className="font-extrabold text-sm" style={{ color: "#01757A" }}>{formatBRL(precoPorcao)}</p>
+                                      </div>
+                                      <div className="text-right">
+                                        <p className="text-xs text-muted-foreground">Lucro</p>
+                                        <span className="badge-green text-xs">{formatBRL(lucroPorcao)}</span>
+                                      </div>
+                                      <button onClick={() => removePorcao(pi, ri)} className="btn-danger p-1.5 shrink-0">
+                                        <Trash2 size={12} />
+                                      </button>
+                                    </div>
                                   </div>
 
-                                  {/* Embalagem */}
-                                  <select
-                                    value={po.embalagemNome}
-                                    onChange={e => editPorcao(pi, ri, "embalagemNome", e.target.value)}
-                                    className="inline-input w-full text-sm"
-                                  >
-                                    <option value="">— Nenhuma embalagem —</option>
-                                    {insumosFiltrados.map(ins => (
-                                      <option key={ins.nome} value={ins.nome}>
-                                        {ins.nome} ({formatBRL(custoDaEmbalagem(ins.nome, insumos))}/un)
-                                      </option>
-                                    ))}
-                                  </select>
+                                  {/* Embalagens da porção */}
+                                  <div className="flex flex-col gap-1.5">
+                                    <div className="flex items-center gap-2 mb-0.5">
+                                      <Package size={12} style={{ color: "#8A381C" }} />
+                                      <span className="text-xs font-bold" style={{ color: "#8A381C" }}>Embalagens</span>
+                                    </div>
 
-                                  {/* Custo da porção */}
-                                  <span className="text-sm font-bold">{formatBRL(custoPorcao)}</span>
+                                    {(po.embalagens ?? []).map((emb, ei) => {
+                                      const custoEmb1 = custoUnitarioInsumo(emb.insumoNome, insumos) * emb.quantidade;
+                                      return (
+                                        <div key={ei} className="flex items-center gap-2">
+                                          <select
+                                            value={emb.insumoNome}
+                                            onChange={e => editEmbalagem(pi, ri, ei, "insumoNome", e.target.value)}
+                                            className="inline-input flex-1 text-sm"
+                                          >
+                                            <option value="">— Selecione um insumo —</option>
+                                            {insumosFiltrados.map(ins => (
+                                              <option key={ins.nome} value={ins.nome}>
+                                                {ins.nome} ({formatBRL(custoUnitarioInsumo(ins.nome, insumos))}/un)
+                                              </option>
+                                            ))}
+                                          </select>
+                                          <span className="text-xs text-muted-foreground shrink-0">×</span>
+                                          <input
+                                            type="number" min={1}
+                                            value={emb.quantidade}
+                                            onChange={e => editEmbalagem(pi, ri, ei, "quantidade", e.target.value)}
+                                            className="inline-input w-14 text-sm text-center"
+                                          />
+                                          {emb.insumoNome && (
+                                            <span className="text-xs font-bold shrink-0 px-2 py-1 rounded-lg"
+                                              style={{ background: "rgba(138,56,28,0.08)", color: "#8A381C", minWidth: "60px", textAlign: "right" }}>
+                                              {formatBRL(custoEmb1)}
+                                            </span>
+                                          )}
+                                          <button onClick={() => removeEmbalagem(pi, ri, ei)} className="btn-danger p-1 shrink-0">
+                                            <Trash2 size={11} />
+                                          </button>
+                                        </div>
+                                      );
+                                    })}
 
-                                  {/* Preço sugerido */}
-                                  <span className="text-sm font-extrabold" style={{ color: "#01757A" }}>
-                                    {formatBRL(precoPorcao)}
-                                  </span>
-
-                                  {/* Lucro */}
-                                  <span className="badge-green text-xs">{formatBRL(lucroPorcao)}</span>
-
-                                  {/* Remover porção */}
-                                  <button onClick={() => removePorcao(pi, ri)} className="btn-danger p-1.5">
-                                    <Trash2 size={12} />
-                                  </button>
+                                    <button
+                                      onClick={() => addEmbalagem(pi, ri)}
+                                      className="flex items-center gap-1 text-xs font-semibold mt-0.5 self-start px-2 py-1 rounded-lg"
+                                      style={{ color: "#8A381C", border: "1px dashed rgba(138,56,28,0.3)" }}
+                                    >
+                                      <Plus size={11} /> Adicionar embalagem
+                                    </button>
+                                  </div>
                                 </div>
                               );
                             })}
 
-                            {/* Adicionar porção */}
                             <button
                               onClick={() => addPorcao(pi)}
-                              className="flex items-center gap-1.5 text-xs font-bold mt-1 px-3 py-1.5 rounded-lg transition-all self-start"
+                              className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg self-start"
                               style={{ color: "#01757A", border: "1px dashed rgba(1,117,122,0.4)" }}
                             >
                               <Plus size={12} /> Adicionar porção
