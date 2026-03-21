@@ -25,9 +25,14 @@ export interface ItemReceita {
   medida: Medida;
 }
 
+export interface PorcaoEmbalagem {
+  insumoNome: string;   // nome do insumo de embalagem
+  quantidade: number;   // quantas por porção (default 1)
+}
+
 export interface PorcaoItem {
-  quantidade: number;       // ex: 4, 6, 9
-  embalagemNome: string;    // nome do insumo de embalagem
+  quantidade: number;           // unidades do produto na porção (ex: 4, 6, 9)
+  embalagens: PorcaoEmbalagem[]; // lista de embalagens desta porção
 }
 
 export interface Produto {
