@@ -1,17 +1,19 @@
 import { useState } from "react";
-import { LayoutDashboard, ShoppingBasket, BookOpen, TrendingUp, ChefHat, Menu, X } from "lucide-react";
+import { LayoutDashboard, ShoppingBasket, BookOpen, TrendingUp, Layers, ChefHat, Menu, X } from "lucide-react";
 import OperacionalModule from "@/components/cookchurros/OperacionalModule";
 import InsumosModule from "@/components/cookchurros/InsumosModule";
 import CardapioModule from "@/components/cookchurros/CardapioModule";
 import PrecificacaoModule from "@/components/cookchurros/PrecificacaoModule";
+import CombosModule from "@/components/cookchurros/CombosModule";
 
-type Modulo = "operacional" | "insumos" | "cardapio" | "precificacao";
+type Modulo = "operacional" | "insumos" | "cardapio" | "precificacao" | "combos";
 
 const navItems = [
   { id: "operacional" as Modulo, label: "Operacional", icon: LayoutDashboard },
   { id: "insumos" as Modulo, label: "Insumos", icon: ShoppingBasket },
   { id: "cardapio" as Modulo, label: "Cardápio", icon: BookOpen },
   { id: "precificacao" as Modulo, label: "Precificação", icon: TrendingUp },
+  { id: "combos" as Modulo, label: "Combos", icon: Layers },
 ];
 
 const Index = () => {
@@ -83,6 +85,7 @@ const Index = () => {
           {modulo === "insumos" && <InsumosModule />}
           {modulo === "cardapio" && <CardapioModule />}
           {modulo === "precificacao" && <PrecificacaoModule />}
+          {modulo === "combos" && <CombosModule />}
         </main>
       </div>
     </div>
