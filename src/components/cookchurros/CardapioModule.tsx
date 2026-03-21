@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Plus, Trash2, ChevronDown, ChevronUp, Package, Search } from "lucide-react";
-import { Produto, Insumo, Medida, calcularCustoProduto, formatBRL } from "@/lib/cookchurros";
+import { Produto, Insumo, Medida, calcularCustoProduto, converterParaBase, formatBRL } from "@/lib/cookchurros";
 import { useInsumos, useProdutos } from "@/hooks/useCloudData";
 
 const medidas: Medida[] = ["g", "kg", "ml", "L", "un"];
@@ -223,36 +223,58 @@ export default function CardapioModule() {
                       </button>
                     </div>
                     <div className="space-y-2">
-                      {produto.receita.map((item, ri) => (
-                        <div key={ri} className="recipe-line">
-                          <select
-                            value={item.insumoNome}
-                            onChange={e => editarItem(pi, ri, "insumoNome", e.target.value)}
-                            className="inline-input flex-1 min-w-0"
-                          >
-                            {todosInsumos.map(ins => (
-                              <option key={ins.nome} value={ins.nome}>{ins.nome}</option>
-                            ))}
-                          </select>
-                          <input
-                            type="number"
-                            value={item.quantidade || ""}
-                            onChange={e => editarItem(pi, ri, "quantidade", e.target.value)}
-                            className="inline-input w-20"
-                            placeholder="Qtde"
-                          />
-                          <select
-                            value={item.medida}
-                            onChange={e => editarItem(pi, ri, "medida", e.target.value)}
-                            className="inline-input w-20"
-                          >
-                            {medidas.map(m => <option key={m} value={m}>{m}</option>)}
-                          </select>
-                          <button className="btn-danger shrink-0" onClick={() => removerItem(pi, ri)}>
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                      ))}
+                      {produto.receita.map((item, ri) => {
+                        // Calcular custo da quantidade utilizada neste item
+                        const insumo = todosInsumos.find(i => i.nome === item.insumoNome);
+                        let custoItem = 0;
+                        if (insumo) {
+                          const compraBase = converterParaBase(insumo.qtdeCompra, insumo.medidaCompra);
+                          const utilBase   = converterParaBase(insumo.qtdeUtil, insumo.medidaUtil);
+                          if (compraBase > 0 && utilBase > 0) {
+                            const aproveitamento = utilBase / compraBase;
+                            const custoReal      = insumo.precoCompra / aproveitamento;
+                            const custoPorBase   = custoReal / utilBase;
+                            custoItem = custoPorBase * converterParaBase(item.quantidade, item.medida);
+                          }
+                        }
+                        return (
+                          <div key={ri} className="recipe-line">
+                            <select
+                              value={item.insumoNome}
+                              onChange={e => editarItem(pi, ri, "insumoNome", e.target.value)}
+                              className="inline-input flex-1 min-w-0"
+                            >
+                              {todosInsumos.map(ins => (
+                                <option key={ins.nome} value={ins.nome}>{ins.nome}</option>
+                              ))}
+                            </select>
+                            <input
+                              type="number"
+                              value={item.quantidade || ""}
+                              onChange={e => editarItem(pi, ri, "quantidade", e.target.value)}
+                              className="inline-input w-20"
+                              placeholder="Qtde"
+                            />
+                            <select
+                              value={item.medida}
+                              onChange={e => editarItem(pi, ri, "medida", e.target.value)}
+                              className="inline-input w-20"
+                            >
+                              {medidas.map(m => <option key={m} value={m}>{m}</option>)}
+                            </select>
+                            <span
+                              className="text-xs font-bold shrink-0 px-2 py-1 rounded-lg"
+                              style={{ background: "rgba(1,117,122,0.08)", color: "#01757A", minWidth: "64px", textAlign: "right" }}
+                              title="Custo da quantidade utilizada"
+                            >
+                              {custoItem > 0 ? formatBRL(custoItem) : "—"}
+                            </span>
+                            <button className="btn-danger shrink-0" onClick={() => removerItem(pi, ri)}>
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
