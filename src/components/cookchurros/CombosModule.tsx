@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Plus, Trash2, ChevronDown, ChevronUp, Pencil, X, Check, Package, Tag } from "lucide-react";
 import {
   Combo, ComboItem, ComboItemTipo,
   calcularCustoProduto, converterParaBase, formatBRL,
   Insumo, Produto
 } from "@/lib/cookchurros";
-import { useInsumos, useProdutos, useCombos } from "@/hooks/useCloudData";
+import { useInsumos, useProdutos, useCombos, useOperacional } from "@/hooks/useCloudData";
 
 // ── Helpers de custo ──────────────────────────────────────────
 function custoUnitarioInsumo(nome: string, insumos: Insumo[]): number {
@@ -135,10 +135,13 @@ function ComboItemRow({ item, index, produtos, insumos, onChange, onRemove }: {
 }
 
 // ── Componente de card de combo ───────────────────────────────
-function ComboCard({ combo, produtos, insumos, onSave, onRemove }: {
+function ComboCard({ combo, produtos, insumos, calcPrecoSugerido, calcLucroReal, taxasSemLucro, onSave, onRemove }: {
   combo: Combo;
   produtos: Produto[];
   insumos: Insumo[];
+  calcPrecoSugerido: (custo: number) => number;
+  calcLucroReal: (preco: number, custo: number) => number;
+  taxasSemLucro: number;
   onSave: (novo: Combo) => void;
   onRemove: () => void;
 }) {
@@ -148,16 +151,12 @@ function ComboCard({ combo, produtos, insumos, onSave, onRemove }: {
 
   const custo = custoTotalCombo(combo, produtos, insumos);
   const precoVenda = combo.precoVenda ?? 0;
-  const economia = combo.itens.reduce((acc, item) => {
-    const prod = produtos.find(p => p.nome === item.produtoNome);
-    if (!prod) return acc;
-    if (item.tipo === "unidade") {
-      const { custoUnitario } = calcularCustoProduto(prod, insumos);
-      return acc + custoUnitario * item.quantidade;
-    }
-    return acc + custoDaPorcao(prod, item.porcaoIndex ?? 0, insumos) * item.quantidade;
-  }, 0);
-  const margemBruta = precoVenda > 0 ? ((precoVenda - custo) / precoVenda) * 100 : 0;
+  const precoSugerido = calcPrecoSugerido(custo);
+  const lucroSugerido = calcLucroReal(precoSugerido, custo);
+  const margemSugerida = precoSugerido > 0 ? ((precoSugerido - custo) / precoSugerido) * 100 : 0;
+  // Se preço manual definido, calcular margem real após taxas
+  const lucroManual = precoVenda > 0 ? calcLucroReal(precoVenda, custo) : 0;
+  const margemManual = precoVenda > 0 ? (lucroManual / precoVenda) * 100 : 0;
 
   const abrirEditor = () => { setDraft({ ...combo, itens: combo.itens.map(i => ({ ...i })) }); setEditando(true); };
   const cancelar    = () => { setDraft({ ...combo }); setEditando(false); };
@@ -221,19 +220,26 @@ function ComboCard({ combo, produtos, insumos, onSave, onRemove }: {
           )}
         </div>
 
-        {/* Custo calculado */}
+        {/* Custo calculado + preço sugerido */}
         {draft.itens.length > 0 && (
-          <div className="stat-card py-2.5">
-            <span className="stat-label">Custo total estimado</span>
-            <p className="font-extrabold text-lg mt-1" style={{ color: "#01757A" }}>
-              {formatBRL(custoTotalCombo(draft, produtos, insumos))}
-            </p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="stat-card py-2.5">
+              <span className="stat-label">Custo estimado</span>
+              <p className="font-extrabold text-lg mt-1">{formatBRL(custoTotalCombo(draft, produtos, insumos))}</p>
+            </div>
+            <div className="stat-card py-2.5" style={{ border: "1px solid rgba(1,117,122,0.2)" }}>
+              <span className="stat-label">Preço Sugerido</span>
+              <p className="font-extrabold text-lg mt-1" style={{ color: "#01757A" }}>
+                {formatBRL(calcPrecoSugerido(custoTotalCombo(draft, produtos, insumos)))}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">com todas as taxas</p>
+            </div>
           </div>
         )}
 
-        {/* Preço de venda */}
+        {/* Preço de venda manual */}
         <div className="flex flex-col gap-1">
-          <label className="stat-label">Preço de venda (R$)</label>
+          <label className="stat-label">Preço de venda (R$) <span className="font-normal text-muted-foreground normal-case">— opcional, sobrescreve o sugerido</span></label>
           <input
             type="number" step="0.01"
             value={draft.precoVenda ?? ""}
@@ -266,16 +272,25 @@ function ComboCard({ combo, produtos, insumos, onSave, onRemove }: {
             <span className="text-xs text-muted-foreground">
               Custo: <strong>{formatBRL(custo)}</strong>
             </span>
+            {/* Preço sugerido automático */}
+            <span className="text-xs px-2 py-0.5 rounded-full font-bold"
+              style={{ background: "rgba(1,117,122,0.08)", color: "#01757A" }}>
+              Sugerido: {formatBRL(precoSugerido)}
+            </span>
+            {/* Preço manual definido */}
             {precoVenda > 0 && (
               <>
                 <span className="text-xs px-2 py-0.5 rounded-full font-bold"
-                  style={{ background: "rgba(1,117,122,0.1)", color: "#01757A" }}>
-                  Venda: {formatBRL(precoVenda)}
+                  style={{ background: "rgba(138,56,28,0.1)", color: "#8A381C" }}>
+                  Definido: {formatBRL(precoVenda)}
                 </span>
-                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                  margemBruta >= 50 ? "badge-green" : margemBruta >= 30 ? "badge-orange" : ""
-                }`} style={margemBruta < 30 ? { background: "rgba(239,68,68,0.1)", color: "#ef4444" } : {}}>
-                  {margemBruta.toFixed(1)}% margem
+                <span className={`text-xs font-bold px-2 py-0.5 rounded-full`}
+                  style={margemManual >= 40
+                    ? { background: "rgba(34,197,94,0.12)", color: "#16a34a" }
+                    : margemManual >= 20
+                    ? { background: "rgba(234,179,8,0.12)", color: "#ca8a04" }
+                    : { background: "rgba(239,68,68,0.1)", color: "#ef4444" }}>
+                  {margemManual.toFixed(1)}% margem real
                 </span>
               </>
             )}
@@ -325,25 +340,33 @@ function ComboCard({ combo, produtos, insumos, onSave, onRemove }: {
           )}
 
           {/* Resumo financeiro */}
-          {precoVenda > 0 && (
-            <div className="grid grid-cols-3 gap-2 mt-1">
-              <div className="stat-card py-2">
-                <span className="stat-label">Custo</span>
-                <p className="font-extrabold text-sm mt-0.5">{formatBRL(custo)}</p>
-              </div>
-              <div className="stat-card py-2">
-                <span className="stat-label">Preço venda</span>
-                <p className="font-extrabold text-sm mt-0.5" style={{ color: "#01757A" }}>{formatBRL(precoVenda)}</p>
-              </div>
-              <div className="stat-card py-2">
-                <span className="stat-label">Lucro bruto</span>
-                <p className="font-extrabold text-sm mt-0.5"
-                  style={{ color: precoVenda - custo >= 0 ? "#01757A" : "#ef4444" }}>
-                  {formatBRL(precoVenda - custo)}
-                </p>
-              </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-1">
+            <div className="stat-card py-2">
+              <span className="stat-label">Custo</span>
+              <p className="font-extrabold text-sm mt-0.5">{formatBRL(custo)}</p>
             </div>
-          )}
+            <div className="stat-card py-2">
+              <span className="stat-label">Preço Sugerido</span>
+              <p className="font-extrabold text-sm mt-0.5" style={{ color: "#01757A" }}>{formatBRL(precoSugerido)}</p>
+              <p className="text-xs text-muted-foreground">Lucro: {formatBRL(lucroSugerido)}</p>
+            </div>
+            {precoVenda > 0 && (
+              <>
+                <div className="stat-card py-2">
+                  <span className="stat-label">Preço Definido</span>
+                  <p className="font-extrabold text-sm mt-0.5" style={{ color: "#8A381C" }}>{formatBRL(precoVenda)}</p>
+                </div>
+                <div className="stat-card py-2">
+                  <span className="stat-label">Lucro Real</span>
+                  <p className="font-extrabold text-sm mt-0.5"
+                    style={{ color: lucroManual >= 0 ? "#01757A" : "#ef4444" }}>
+                    {formatBRL(lucroManual)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{margemManual.toFixed(1)}% margem</p>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -355,9 +378,86 @@ export default function CombosModule() {
   const { insumos, loading: loadingI } = useInsumos();
   const { produtos, loading: loadingP } = useProdutos();
   const { combos, loading: loadingC, save } = useCombos();
+  const { dados, loading: loadingOp } = useOperacional();
   const [busca, setBusca] = useState("");
 
-  const loading = loadingI || loadingP || loadingC;
+  const loading = loadingI || loadingP || loadingC || loadingOp;
+
+  // Mesmas taxas da precificação — lidas do localStorage
+  const pctLucro  = parseFloat(localStorage.getItem("pct_lucro")  ?? "60");
+  const pctCartao = parseFloat(localStorage.getItem("pct_cartao") ?? "3.2");
+  const pctApp    = parseFloat(localStorage.getItem("pct_app")    ?? "24");
+
+  const mediaCustoOp = useMemo(() => {
+    if (!dados) return 0;
+    const hoje = new Date();
+    const vals: number[] = [];
+    for (let i = 1; i <= 6; i++) {
+      const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const mes = dados[key];
+      if (!mes) continue;
+      const fatL = mes.faturamentoLoja ?? 0;
+      const fatI = mes.faturamentoIfood ?? 0;
+      const fat9 = mes.faturamento99 ?? 0;
+      const fat = (fatL + fatI + fat9) > 0 ? fatL + fatI + fat9 : (mes.faturamento ?? 0);
+      if (fat <= 0) continue;
+      vals.push((mes.gastos.reduce((a, g) => a + g.valor, 0) / fat) * 100);
+      if (vals.length === 3) break;
+    }
+    return vals.length === 0 ? 0 : vals.reduce((a, b) => a + b, 0) / vals.length;
+  }, [dados]);
+
+  const pctOp = parseFloat(localStorage.getItem("pct_op_edit") ?? String(mediaCustoOp));
+  const taxasSemLucro = pctCartao + pctApp + pctOp;
+
+  // Preço mínimo (equilibrio) e preço sugerido com lucro
+  const calcPrecoSugerido = (custo: number) => {
+    if (custo <= 0 || taxasSemLucro >= 100) return 0;
+    const precoMinimo = custo / (1 - taxasSemLucro / 100);
+    return precoMinimo * (1 + pctLucro / 100);
+  };
+
+  const calcLucroReal = (preco: number, custo: number) =>
+    preco - custo - preco * (taxasSemLucro / 100);
+
+  // Taxas — lidas do localStorage (mesmas da Precificação)
+  const pctLucro  = parseFloat(localStorage.getItem("pct_lucro")  ?? "60");
+  const pctCartao = parseFloat(localStorage.getItem("pct_cartao") ?? "3.2");
+  const pctApp    = parseFloat(localStorage.getItem("pct_app")    ?? "24");
+  const pctOpEdit = localStorage.getItem("pct_op_edit");
+
+  const { dados: dadosOp } = useOperacional();
+  const mediaCustoOp = (() => {
+    if (!dadosOp) return 0;
+    const hoje = new Date();
+    const vals: number[] = [];
+    for (let i = 1; i <= 6; i++) {
+      const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const mes = dadosOp[key];
+      if (!mes) continue;
+      const fatL = mes.faturamentoLoja ?? 0;
+      const fatI = mes.faturamentoIfood ?? 0;
+      const fat9 = mes.faturamento99 ?? 0;
+      const fat = (fatL + fatI + fat9) > 0 ? fatL + fatI + fat9 : (mes.faturamento ?? 0);
+      if (fat <= 0) continue;
+      vals.push((mes.gastos.reduce((a, g) => a + g.valor, 0) / fat) * 100);
+      if (vals.length === 3) break;
+    }
+    return vals.length === 0 ? 0 : vals.reduce((a, b) => a + b, 0) / vals.length;
+  })();
+  const pctOp = pctOpEdit !== null ? parseFloat(pctOpEdit) : mediaCustoOp;
+  const taxasSemLucro = pctCartao + pctApp + pctOp;
+
+  // Método 3 — igual à Precificação
+  const calcPrecoSugerido = (custo: number) => {
+    if (custo <= 0 || taxasSemLucro >= 100) return 0;
+    const precoMinimo = custo / (1 - taxasSemLucro / 100);
+    return precoMinimo * (1 + pctLucro / 100);
+  };
+  const calcLucroReal = (preco: number, custo: number) =>
+    preco - custo - preco * (taxasSemLucro / 100);
 
   const adicionar = () => {
     const novo: Combo = {
@@ -379,7 +479,9 @@ export default function CombosModule() {
   const margemMedia = combosComPreco.length > 0
     ? combosComPreco.reduce((acc, c) => {
         const custo = custoTotalCombo(c, produtos, insumos);
-        return acc + ((c.precoVenda! - custo) / c.precoVenda!) * 100;
+        const preco = c.precoVenda!;
+        const lucro = calcLucroLiquido(preco, custo);
+        return acc + (lucro / preco) * 100;
       }, 0) / combosComPreco.length
     : 0;
 
@@ -454,6 +556,9 @@ export default function CombosModule() {
               combo={combo}
               produtos={produtos}
               insumos={insumos}
+              calcPrecoSugerido={calcPrecoSugerido}
+              calcLucroReal={calcLucroReal}
+              taxasSemLucro={taxasSemLucro}
               onSave={novo => salvarCombo(combo.id, novo)}
               onRemove={() => removerCombo(combo.id)}
             />
