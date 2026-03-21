@@ -421,44 +421,6 @@ export default function CombosModule() {
   const calcLucroReal = (preco: number, custo: number) =>
     preco - custo - preco * (taxasSemLucro / 100);
 
-  // Taxas — lidas do localStorage (mesmas da Precificação)
-  const pctLucro  = parseFloat(localStorage.getItem("pct_lucro")  ?? "60");
-  const pctCartao = parseFloat(localStorage.getItem("pct_cartao") ?? "3.2");
-  const pctApp    = parseFloat(localStorage.getItem("pct_app")    ?? "24");
-  const pctOpEdit = localStorage.getItem("pct_op_edit");
-
-  const { dados: dadosOp } = useOperacional();
-  const mediaCustoOp = (() => {
-    if (!dadosOp) return 0;
-    const hoje = new Date();
-    const vals: number[] = [];
-    for (let i = 1; i <= 6; i++) {
-      const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      const mes = dadosOp[key];
-      if (!mes) continue;
-      const fatL = mes.faturamentoLoja ?? 0;
-      const fatI = mes.faturamentoIfood ?? 0;
-      const fat9 = mes.faturamento99 ?? 0;
-      const fat = (fatL + fatI + fat9) > 0 ? fatL + fatI + fat9 : (mes.faturamento ?? 0);
-      if (fat <= 0) continue;
-      vals.push((mes.gastos.reduce((a, g) => a + g.valor, 0) / fat) * 100);
-      if (vals.length === 3) break;
-    }
-    return vals.length === 0 ? 0 : vals.reduce((a, b) => a + b, 0) / vals.length;
-  })();
-  const pctOp = pctOpEdit !== null ? parseFloat(pctOpEdit) : mediaCustoOp;
-  const taxasSemLucro = pctCartao + pctApp + pctOp;
-
-  // Método 3 — igual à Precificação
-  const calcPrecoSugerido = (custo: number) => {
-    if (custo <= 0 || taxasSemLucro >= 100) return 0;
-    const precoMinimo = custo / (1 - taxasSemLucro / 100);
-    return precoMinimo * (1 + pctLucro / 100);
-  };
-  const calcLucroReal = (preco: number, custo: number) =>
-    preco - custo - preco * (taxasSemLucro / 100);
-
   const adicionar = () => {
     const novo: Combo = {
       id: Date.now().toString(),
