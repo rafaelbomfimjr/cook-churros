@@ -278,7 +278,7 @@ export default function PrecificacaoModule() {
                             {/* Cabeçalho das porções */}
                             <div className="grid gap-2 text-xs font-bold text-muted-foreground uppercase tracking-wider px-1"
                               style={{ gridTemplateColumns: "80px 1fr 120px 120px 100px" }}>
-                              <span>Qtde/Porção</span>
+                              <span>Qtde</span>
                               <span>Embalagem</span>
                               <span>Custo Porção</span>
                               <span>Preço Sugerido</span>
