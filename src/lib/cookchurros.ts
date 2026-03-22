@@ -50,23 +50,6 @@ export interface HistoricoPreco {
   data: string; // ISO date string
 }
 
-export type CategoriaInsumo =
-  | "Ingrediente"
-  | "Embalagem"
-  | "Complemento"
-  | "Recheio"
-  | "Bebida"
-  | "Outro";
-
-export const CATEGORIAS_INSUMO: CategoriaInsumo[] = [
-  "Ingrediente",
-  "Embalagem",
-  "Complemento",
-  "Recheio",
-  "Bebida",
-  "Outro",
-];
-
 export interface Insumo {
   nome: string;
   qtdeCompra: number;
@@ -75,7 +58,7 @@ export interface Insumo {
   qtdeUtil: number;
   medidaUtil: Medida;
   historicoPrecos?: HistoricoPreco[];
-  categoria?: CategoriaInsumo;
+  categoria?: string;  // dinâmico — gerenciado pelo usuário
 }
 
 export const mesAtualKey = () => new Date().toISOString().slice(0, 7);
