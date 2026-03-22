@@ -179,3 +179,25 @@ export function useCombos() {
 
   return { combos, loading, save };
 }
+
+const CATEGORIAS_DEFAULT = ["Ingrediente", "Embalagem", "Complemento", "Recheio", "Bebida", "Outro"];
+
+export function useCategoriasInsumo() {
+  const [categorias, setCategorias] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    apiGet<string[]>("/api/categorias-insumo").then((data) => {
+      setCategorias(data ?? CATEGORIAS_DEFAULT);
+      if (!data) apiPost("/api/categorias-insumo", CATEGORIAS_DEFAULT);
+      setLoading(false);
+    });
+  }, []);
+
+  const save = useCallback(async (novas: string[]) => {
+    setCategorias(novas);
+    await apiPost("/api/categorias-insumo", novas);
+  }, []);
+
+  return { categorias, loading, save };
+}
