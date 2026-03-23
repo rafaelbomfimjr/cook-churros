@@ -201,3 +201,25 @@ export function useCategoriasInsumo() {
 
   return { categorias, loading, save };
 }
+
+const CATEGORIAS_GASTO_DEFAULT = ["Distribuidor", "Transporte", "Materiais", "Embalagens", "Aluguel", "Serviços", "Outros"];
+
+export function useCategoriasGasto() {
+  const [categorias, setCategorias] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    apiGet<string[]>("/api/categorias-gasto").then((data) => {
+      setCategorias(data ?? CATEGORIAS_GASTO_DEFAULT);
+      if (!data) apiPost("/api/categorias-gasto", CATEGORIAS_GASTO_DEFAULT);
+      setLoading(false);
+    });
+  }, []);
+
+  const save = useCallback(async (novas: string[]) => {
+    setCategorias(novas);
+    await apiPost("/api/categorias-gasto", novas);
+  }, []);
+
+  return { categorias, loading, save };
+}
