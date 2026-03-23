@@ -5,6 +5,7 @@ export type Medida = "g" | "kg" | "ml" | "L" | "un";
 export interface Gasto {
   nome: string;
   valor: number;
+  categoria?: string;
 }
 
 export interface DadosMes {
