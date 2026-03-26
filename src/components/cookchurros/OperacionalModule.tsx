@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Plus, Trash2, TrendingUp, DollarSign, Percent, Trophy, Calendar, Settings, Pencil, X, Check } from "lucide-react";
+import { Plus, Trash2, TrendingUp, DollarSign, Percent, Trophy, Calendar, Settings, Pencil, X, Check, ChevronDown, ChevronUp } from "lucide-react";
 import { formatBRL } from "@/lib/cookchurros";
 import { useOperacional, useCategoriasGasto } from "@/hooks/useCloudData";
 
@@ -87,6 +87,7 @@ export default function OperacionalModule() {
   const { dados, dadosMes, mesAtual, loading, updateMes, trocarMes } = useOperacional();
   const { categorias, save: saveCategorias } = useCategoriasGasto();
   const [gerenciandoCategorias, setGerenciandoCategorias] = useState(false);
+  const [show99, setShow99] = useState(false);
 
   const chartRef = useRef<HTMLCanvasElement>(null);
   const chartInstance = useRef<any>(null);
@@ -94,7 +95,10 @@ export default function OperacionalModule() {
   const totalGastos = dadosMes.gastos.reduce((acc, g) => acc + g.valor, 0);
   const fatLoja   = dadosMes.faturamentoLoja  ?? 0;
   const fatIfood  = dadosMes.faturamentoIfood ?? 0;
-  const fat99     = dadosMes.faturamento99    ?? 0;
+  const repasses99  = dadosMes.repasses99 ?? [];
+  const fat99       = repasses99.length > 0
+    ? repasses99.reduce((a, r) => a + r.valor, 0)
+    : (dadosMes.faturamento99 ?? 0);
   const faturamentoTotal = (fatLoja + fatIfood + fat99) > 0 ? fatLoja + fatIfood + fat99 : dadosMes.faturamento;
   const custoOperacional = faturamentoTotal > 0 ? (totalGastos / faturamentoTotal) * 100 : 0;
   const custoColor = custoOperacional > 40 ? "text-destructive" : custoOperacional > 25 ? "text-yellow-500" : "text-green-600";
@@ -241,10 +245,73 @@ export default function OperacionalModule() {
               <input type="number" value={dadosMes.faturamentoIfood || ""} placeholder="0,00"
                 onChange={e => updateMes({ faturamentoIfood: parseFloat(e.target.value) || 0 })} className="inline-input w-full font-bold" />
             </div>
+            {/* 99Food — com repasses semanais */}
             <div className="flex flex-col gap-1">
-              <label className="text-xs text-muted-foreground font-semibold">99Food</label>
-              <input type="number" value={dadosMes.faturamento99 || ""} placeholder="0,00"
-                onChange={e => updateMes({ faturamento99: parseFloat(e.target.value) || 0 })} className="inline-input w-full font-bold" />
+              <div className="flex items-center justify-between">
+                <label className="text-xs text-muted-foreground font-semibold">99Food</label>
+                <button
+                  onClick={() => setShow99(!show99)}
+                  className="flex items-center gap-1 text-xs font-semibold"
+                  style={{ color: "#01757A" }}
+                >
+                  {repasses99.length > 0 ? `${repasses99.length} repasse(s)` : "Repasses"}
+                  {show99 ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                </button>
+              </div>
+              {/* Total calculado dos repasses */}
+              <div className="inline-input w-full font-extrabold text-lg flex items-center"
+                style={{ color: fat99 > 0 ? "#01757A" : "hsl(var(--muted-foreground))" }}>
+                {fat99 > 0 ? formatBRL(fat99) : "R$ 0,00"}
+              </div>
+              {/* Painel de repasses */}
+              {show99 && (
+                <div className="mt-2 flex flex-col gap-1.5 p-3 rounded-xl" style={{ background: "hsl(var(--muted))" }}>
+                  <p className="text-xs font-bold text-muted-foreground mb-1">Repasses semanais</p>
+                  {repasses99.map((r, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <input
+                        type="date"
+                        value={r.data}
+                        onChange={e => {
+                          const novos = repasses99.map((rp, idx) => idx === i ? { ...rp, data: e.target.value } : rp);
+                          updateMes({ repasses99: novos });
+                        }}
+                        className="inline-input text-xs"
+                        style={{ width: "130px" }}
+                      />
+                      <input
+                        type="number"
+                        value={r.valor || ""}
+                        placeholder="0,00"
+                        onChange={e => {
+                          const novos = repasses99.map((rp, idx) => idx === i ? { ...rp, valor: parseFloat(e.target.value) || 0 } : rp);
+                          updateMes({ repasses99: novos });
+                        }}
+                        className="inline-input flex-1 text-sm font-bold"
+                      />
+                      <button
+                        onClick={() => updateMes({ repasses99: repasses99.filter((_, idx) => idx !== i) })}
+                        className="btn-danger p-1 shrink-0"
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => updateMes({ repasses99: [...repasses99, { data: new Date().toISOString().slice(0, 10), valor: 0 }] })}
+                    className="flex items-center gap-1 text-xs font-semibold mt-1 self-start px-2 py-1 rounded-lg"
+                    style={{ color: "#01757A", border: "1px dashed rgba(1,117,122,0.4)" }}
+                  >
+                    <Plus size={11} /> Adicionar repasse
+                  </button>
+                  {repasses99.length > 0 && (
+                    <div className="flex items-center justify-between pt-1.5 mt-0.5 border-t" style={{ borderColor: "hsl(var(--border))" }}>
+                      <span className="text-xs font-bold text-muted-foreground">Total</span>
+                      <span className="text-sm font-extrabold" style={{ color: "#01757A" }}>{formatBRL(fat99)}</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-xs font-bold" style={{ color: "hsl(var(--primary))" }}>Total</label>
