@@ -8,11 +8,17 @@ export interface Gasto {
   categoria?: string;
 }
 
+export interface Repasse99 {
+  data: string;    // ex: "2026-03-15"
+  valor: number;
+}
+
 export interface DadosMes {
   faturamento: number;          // total (legado)
   faturamentoLoja?: number;     // venda presencial / balcão
   faturamentoIfood?: number;    // venda via iFood
-  faturamento99?: number;       // venda via 99Food
+  faturamento99?: number;       // total 99Food (soma dos repasses)
+  repasses99?: Repasse99[];     // repasses semanais do 99Food
   gastos: Gasto[];
 }
 
