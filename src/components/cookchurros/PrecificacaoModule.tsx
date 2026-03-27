@@ -3,22 +3,18 @@ import { calcularCustoProduto, converterParaBase, formatBRL, Insumo, PorcaoItem 
 import { useInsumos, useProdutos, useOperacional } from "@/hooks/useCloudData";
 import { Info, Plus, Trash2, ChevronDown, ChevronUp, Package } from "lucide-react";
 
-// Custo unitário de um insumo (já considerando desperdício)
 function custoUnitarioInsumo(nome: string, insumos: Insumo[]): number {
   const ins = insumos.find(i => i.nome === nome);
   if (!ins) return 0;
-  const compraBase = converterParaBase(ins.qtdeCompra, ins.medidaCompra);
-  const utilBase   = converterParaBase(ins.qtdeUtil, ins.medidaUtil);
-  if (compraBase <= 0 || utilBase <= 0) return 0;
-  const aproveitamento = utilBase / compraBase;
-  return (ins.precoCompra / aproveitamento) / utilBase;
+  const cb = converterParaBase(ins.qtdeCompra, ins.medidaCompra);
+  const ub = converterParaBase(ins.qtdeUtil, ins.medidaUtil);
+  if (cb <= 0 || ub <= 0) return 0;
+  return (ins.precoCompra / (ub / cb)) / ub;
 }
 
-// Custo total das embalagens de uma porção
 function custoPorcaoEmbalagens(porcao: PorcaoItem, insumos: Insumo[]): number {
-  return (porcao.embalagens ?? []).reduce((acc, emb) => {
-    return acc + custoUnitarioInsumo(emb.insumoNome, insumos) * emb.quantidade;
-  }, 0);
+  return (porcao.embalagens ?? []).reduce((acc, emb) =>
+    acc + custoUnitarioInsumo(emb.insumoNome, insumos) * emb.quantidade, 0);
 }
 
 export default function PrecificacaoModule() {
@@ -42,6 +38,16 @@ export default function PrecificacaoModule() {
     setPctOpEditRaw(v);
     if (v === null) localStorage.removeItem("pct_op_edit");
     else localStorage.setItem("pct_op_edit", String(v));
+  };
+
+  // Valor de venda por produto (localStorage keyed por nome)
+  const [valoresVenda, setValoresVenda] = useState<Record<string, number>>(() => {
+    try { return JSON.parse(localStorage.getItem("precif_valores_venda") ?? "{}"); } catch { return {}; }
+  });
+  const setValorVenda = (nome: string, valor: number) => {
+    const novos = { ...valoresVenda, [nome]: valor };
+    setValoresVenda(novos);
+    localStorage.setItem("precif_valores_venda", JSON.stringify(novos));
   };
 
   const [expandidos, setExpandidos] = useState<Set<number>>(new Set());
@@ -75,6 +81,7 @@ export default function PrecificacaoModule() {
   const taxasSemLucro = pctCartao + pctApp + pctOp;
   const totalTaxa = pctLucro + taxasSemLucro;
 
+  // Método 3 — Preço por Camadas
   const calcPreco = (custo: number) => {
     if (custo <= 0 || taxasSemLucro >= 100) return 0;
     return (custo / (1 - taxasSemLucro / 100)) * (1 + pctLucro / 100);
@@ -82,7 +89,7 @@ export default function PrecificacaoModule() {
   const calcLucro = (preco: number, custo: number) =>
     preco - custo - preco * (taxasSemLucro / 100);
 
-  // Helpers para editar porções
+  // Helpers de porção
   const togglePorcao = (pi: number, ativo: boolean) =>
     save(produtos.map((p, i) => i === pi ? {
       ...p, vendidoPorPorcao: ativo,
@@ -202,7 +209,7 @@ export default function PrecificacaoModule() {
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="data-table min-w-[600px]">
+          <table className="data-table min-w-[700px]">
             <thead>
               <tr>
                 <th>Produto</th>
@@ -210,6 +217,7 @@ export default function PrecificacaoModule() {
                 <th>Custo Total</th>
                 <th>Custo/Un.</th>
                 <th>Preço Sugerido</th>
+                <th>Valor de Venda</th>
                 <th>Lucro/Un.</th>
                 <th className="w-8"></th>
               </tr>
@@ -217,16 +225,20 @@ export default function PrecificacaoModule() {
             <tbody>
               {produtosOrdenados.map(({ p: produto, originalIndex: pi }) => {
                 const { custoTotal, custoUnitario } = calcularCustoProduto(produto, insumos);
-                const isPorcao  = produto.vendidoPorPorcao ?? false;
+                const isPorcao   = produto.vendidoPorPorcao ?? false;
                 const isExpanded = expandidos.has(pi);
-                const precoUn   = calcPreco(custoUnitario);
-                const lucroUn   = calcLucro(precoUn, custoUnitario);
+                const precoSug   = calcPreco(custoUnitario);
+                const valorVenda = valoresVenda[produto.nome] ?? 0;
+                // Lucro baseado no valor de venda se definido, senão no sugerido
+                const precoRef   = valorVenda > 0 ? valorVenda : precoSug;
+                const lucroUn    = calcLucro(precoRef, custoUnitario);
 
                 return (
                   <>
-                    {/* Linha principal */}
                     <tr key={`r-${pi}`} style={{ background: isExpanded ? "rgba(1,117,122,0.03)" : undefined }}>
                       <td className="font-bold">{produto.nome}</td>
+
+                      {/* Toggle porção */}
                       <td className="text-center">
                         <button
                           onClick={() => { togglePorcao(pi, !isPorcao); if (!isPorcao) setExpandidos(prev => { const s = new Set(prev); s.add(pi); return s; }); }}
@@ -244,19 +256,45 @@ export default function PrecificacaoModule() {
                           Porção
                         </button>
                       </td>
+
                       <td>{formatBRL(custoTotal)}</td>
                       <td className="font-bold">{formatBRL(custoUnitario)}</td>
+
                       {!isPorcao ? (
                         <>
-                          <td className="font-extrabold" style={{ color: "#01757A" }}>{formatBRL(precoUn)}</td>
-                          <td><span className="badge-green">{formatBRL(lucroUn)}</span></td>
+                          {/* Preço sugerido */}
+                          <td className="font-extrabold" style={{ color: "#01757A" }}>
+                            {formatBRL(precoSug)}
+                          </td>
+
+                          {/* Valor de venda editável */}
+                          <td>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={valorVenda || ""}
+                              placeholder={formatBRL(precoSug).replace("R$\u00a0", "")}
+                              onChange={e => setValorVenda(produto.nome, parseFloat(e.target.value) || 0)}
+                              className="inline-input w-full text-sm font-bold"
+                              style={{ color: valorVenda > 0 ? "#8A381C" : undefined }}
+                            />
+                          </td>
+
+                          {/* Lucro */}
+                          <td>
+                            <span className={`badge-green ${lucroUn < 0 ? "text-destructive" : ""}`}>
+                              {formatBRL(lucroUn)}
+                            </span>
+                          </td>
                         </>
                       ) : (
                         <>
                           <td className="text-xs text-muted-foreground">{(produto.porcoes ?? []).length} porção(ões)</td>
                           <td></td>
+                          <td></td>
                         </>
                       )}
+
                       <td>
                         {isPorcao && (
                           <button onClick={() => toggleExpandido(pi)} className="p-1 rounded-lg text-muted-foreground hover:text-foreground">
@@ -269,43 +307,53 @@ export default function PrecificacaoModule() {
                     {/* Porções expandidas */}
                     {isPorcao && isExpanded && (
                       <tr key={`porcoes-${pi}`}>
-                        <td colSpan={7} style={{ padding: 0, background: "rgba(1,117,122,0.02)" }}>
+                        <td colSpan={8} style={{ padding: 0, background: "rgba(1,117,122,0.02)" }}>
                           <div className="px-4 py-3 flex flex-col gap-4">
                             {(produto.porcoes ?? []).map((po, ri) => {
                               const custoEmb    = custoPorcaoEmbalagens(po, insumos);
                               const custoPorcao = custoUnitario * po.quantidade + custoEmb;
-                              const precoPorcao = calcPreco(custoPorcao);
-                              const lucroPorcao = calcLucro(precoPorcao, custoPorcao);
+                              const precoPorc   = calcPreco(custoPorcao);
+                              const vendaPorc   = valoresVenda[`${produto.nome}__porcao_${ri}`] ?? 0;
+                              const precoRefP   = vendaPorc > 0 ? vendaPorc : precoPorc;
+                              const lucroPorc   = calcLucro(precoRefP, custoPorcao);
 
                               return (
                                 <div key={ri} className="rounded-xl border p-3 flex flex-col gap-3"
                                   style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
 
-                                  {/* Cabeçalho da porção */}
                                   <div className="flex items-center justify-between gap-3 flex-wrap">
                                     <div className="flex items-center gap-2">
                                       <span className="text-xs font-bold text-muted-foreground shrink-0">Porção de</span>
-                                      <input
-                                        type="number" min={1}
-                                        value={po.quantidade}
+                                      <input type="number" min={1} value={po.quantidade}
                                         onChange={e => editQtdePorcao(pi, ri, e.target.value)}
-                                        className="inline-input w-16 text-sm font-bold text-center"
-                                      />
+                                        className="inline-input w-16 text-sm font-bold text-center" />
                                       <span className="text-xs text-muted-foreground shrink-0">unidades</span>
                                     </div>
 
-                                    <div className="flex items-center gap-4">
+                                    <div className="flex items-center gap-3 flex-wrap">
                                       <div className="text-right">
-                                        <p className="text-xs text-muted-foreground">Custo total</p>
+                                        <p className="text-xs text-muted-foreground">Custo</p>
                                         <p className="font-bold text-sm">{formatBRL(custoPorcao)}</p>
                                       </div>
                                       <div className="text-right">
-                                        <p className="text-xs text-muted-foreground">Preço sugerido</p>
-                                        <p className="font-extrabold text-sm" style={{ color: "#01757A" }}>{formatBRL(precoPorcao)}</p>
+                                        <p className="text-xs text-muted-foreground">Sugerido</p>
+                                        <p className="font-extrabold text-sm" style={{ color: "#01757A" }}>{formatBRL(precoPorc)}</p>
+                                      </div>
+                                      {/* Valor de venda da porção */}
+                                      <div className="flex flex-col gap-0.5">
+                                        <p className="text-xs text-muted-foreground">Valor de venda</p>
+                                        <input
+                                          type="number" step="0.01"
+                                          value={vendaPorc || ""}
+                                          placeholder={formatBRL(precoPorc).replace("R$\u00a0", "")}
+                                          onChange={e => setValorVenda(`${produto.nome}__porcao_${ri}`, parseFloat(e.target.value) || 0)}
+                                          className="inline-input text-sm font-bold text-right"
+                                          style={{ width: "90px", color: vendaPorc > 0 ? "#8A381C" : undefined }}
+                                        />
                                       </div>
                                       <div className="text-right">
                                         <p className="text-xs text-muted-foreground">Lucro</p>
-                                        <span className="badge-green text-xs">{formatBRL(lucroPorcao)}</span>
+                                        <span className="badge-green text-xs">{formatBRL(lucroPorc)}</span>
                                       </div>
                                       <button onClick={() => removePorcao(pi, ri)} className="btn-danger p-1.5 shrink-0">
                                         <Trash2 size={12} />
@@ -313,33 +361,24 @@ export default function PrecificacaoModule() {
                                     </div>
                                   </div>
 
-                                  {/* Embalagens da porção */}
+                                  {/* Embalagens */}
                                   <div className="flex flex-col gap-1.5">
                                     <div className="flex items-center gap-2 mb-0.5">
                                       <Package size={12} style={{ color: "#8A381C" }} />
                                       <span className="text-xs font-bold" style={{ color: "#8A381C" }}>Embalagens</span>
                                     </div>
-
                                     {(po.embalagens ?? []).map((emb, ei) => {
                                       const custoEmb1 = custoUnitarioInsumo(emb.insumoNome, insumos) * emb.quantidade;
                                       return (
                                         <div key={ei} className="flex items-center gap-2">
-                                          {/* Qtde — pequeno e fixo */}
-                                          <input
-                                            type="number" min={1}
-                                            value={emb.quantidade}
+                                          <input type="number" min={1} value={emb.quantidade}
                                             onChange={e => editEmbalagem(pi, ri, ei, "quantidade", e.target.value)}
                                             className="inline-input text-sm text-center font-bold shrink-0"
-                                            style={{ width: "52px" }}
-                                          />
+                                            style={{ width: "52px" }} />
                                           <span className="text-xs text-muted-foreground shrink-0">×</span>
-                                          {/* Select — ocupa o espaço restante */}
-                                          <select
-                                            value={emb.insumoNome}
+                                          <select value={emb.insumoNome}
                                             onChange={e => editEmbalagem(pi, ri, ei, "insumoNome", e.target.value)}
-                                            className="inline-input text-sm min-w-0"
-                                            style={{ flex: "1 1 0" }}
-                                          >
+                                            className="inline-input text-sm min-w-0" style={{ flex: "1 1 0" }}>
                                             <option value="">— Selecione um insumo —</option>
                                             {insumosFiltrados.map(ins => (
                                               <option key={ins.nome} value={ins.nome}>
@@ -347,7 +386,6 @@ export default function PrecificacaoModule() {
                                               </option>
                                             ))}
                                           </select>
-                                          {/* Custo da linha */}
                                           <span className="text-xs font-bold shrink-0 px-2 py-1 rounded-lg"
                                             style={{ background: "rgba(138,56,28,0.08)", color: "#8A381C", width: "64px", textAlign: "right" }}>
                                             {emb.insumoNome ? formatBRL(custoEmb1) : "—"}
@@ -358,24 +396,18 @@ export default function PrecificacaoModule() {
                                         </div>
                                       );
                                     })}
-
-                                    <button
-                                      onClick={() => addEmbalagem(pi, ri)}
+                                    <button onClick={() => addEmbalagem(pi, ri)}
                                       className="flex items-center gap-1 text-xs font-semibold mt-0.5 self-start px-2 py-1 rounded-lg"
-                                      style={{ color: "#8A381C", border: "1px dashed rgba(138,56,28,0.3)" }}
-                                    >
+                                      style={{ color: "#8A381C", border: "1px dashed rgba(138,56,28,0.3)" }}>
                                       <Plus size={11} /> Adicionar embalagem
                                     </button>
                                   </div>
                                 </div>
                               );
                             })}
-
-                            <button
-                              onClick={() => addPorcao(pi)}
+                            <button onClick={() => addPorcao(pi)}
                               className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg self-start"
-                              style={{ color: "#01757A", border: "1px dashed rgba(1,117,122,0.4)" }}
-                            >
+                              style={{ color: "#01757A", border: "1px dashed rgba(1,117,122,0.4)" }}>
                               <Plus size={12} /> Adicionar porção
                             </button>
                           </div>
