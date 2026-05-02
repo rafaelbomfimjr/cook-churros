@@ -270,16 +270,6 @@ export default function OperacionalModule() {
                   {repasses99.map((r, i) => (
                     <div key={i} className="flex items-center gap-2">
                       <input
-                        type="date"
-                        value={r.data}
-                        onChange={e => {
-                          const novos = repasses99.map((rp, idx) => idx === i ? { ...rp, data: e.target.value } : rp);
-                          updateMes({ repasses99: novos });
-                        }}
-                        className="inline-input text-xs"
-                        style={{ width: "130px" }}
-                      />
-                      <input
                         type="number"
                         value={r.valor || ""}
                         placeholder="0,00"
